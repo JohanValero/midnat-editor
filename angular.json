@@ -2,11 +2,12 @@
   "$schema": "./node_modules/@angular/cli/lib/config/schema.json",
   "version": 1,
   "cli": {
-    "packageManager": "npm"
+    "packageManager": "npm",
+    "analytics": false
   },
   "newProjectRoot": "projects",
   "projects": {
-    "kold-frontend": {
+    "midnat-frontend": {
       "projectType": "application",
       "schematics": {
         "@schematics/angular:component": {
@@ -29,9 +30,7 @@
                 "input": "public"
               }
             ],
-            "styles": [
-              "src/styles.scss"
-            ]
+            "styles": ["src/styles.scss"]
           },
           "configurations": {
             "production": {
@@ -61,10 +60,10 @@
           "builder": "@angular/build:dev-server",
           "configurations": {
             "production": {
-              "buildTarget": "kold-frontend:build:production"
+              "buildTarget": "midnat-frontend:build:production"
             },
             "development": {
-              "buildTarget": "kold-frontend:build:development"
+              "buildTarget": "midnat-frontend:build:development"
             }
           },
           "defaultConfiguration": "development"

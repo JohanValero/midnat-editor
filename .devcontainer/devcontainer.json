@@ -1,0 +1,43 @@
+{
+  "name": "Angular Workspace",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:22",
+
+  "features": {
+    "ghcr.io/dirien/devcontainer-features/opencode:0": {
+      "version": "latest"
+    }
+  },
+  "mounts": [
+    {
+      "type": "bind",
+      "source": "${localEnv:USERPROFILE}/.config/opencode",
+      "target": "/home/vscode/.config/opencode"
+    }
+  ],
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "typescript.tsdk": "node_modules/typescript/lib",
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "eslint.validate": ["javascript", "typescript", "html"]
+      },
+      "extensions": [
+        "angular.ng-template",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "ZixuanChen.vitest-explorer",
+        "firsttris.vscode-jest-runner"
+      ]
+    }
+  },
+  "forwardPorts": [4200],
+  "portsAttributes": {
+    "4200": {
+      "label": "Angular Development Server",
+      "onAutoForward": "notify"
+    }
+  },
+  "postCreateCommand": "npm install -g @angular/cli@21 && npm install",
+  "remoteUser": "node"
+}
