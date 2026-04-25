@@ -59,37 +59,98 @@ export const ChangeTrackerExtension = Extension.create({
             if (!tr.docChanged) return prev;
 
             const now = Date.now();
-            const newOps: EditOperation[] = [];
-            const newModified = new Set(prev.modifiedOffsets);
+            let newOps = [...prev.operations];
 
-            tr.steps.forEach((step) => {
-              if (!(step instanceof ReplaceStep)) return;
+            // Evaluar cada step de la transacción de forma aislada
+            tr.steps.forEach((step, index) => {
+              // Si el step no reemplaza texto (ej. añadir una marca/formato), solo mapeamos
+              // las posiciones para asegurar que nada quede desfasado.
+              if (!(step instanceof ReplaceStep)) {
+                const stepMap = step.getMap();
+                newOps = newOps.map((op) => ({
+                  ...op,
+                  position: stepMap.map(op.position),
+                }));
+                return;
+              }
+
+              const stepDoc = tr.docs[index];
               const { from, to } = step;
 
-              if (to > from) {
-                const deleted = oldState.doc.textBetween(from, to, '\n');
-                if (deleted) {
-                  newOps.push({ type: 'delete', position: from, text: deleted, timestamp: now });
+              // Extraer qué se está borrando y qué se está insertando
+              const deleted = to > from ? stepDoc.textBetween(from, to, '\n') : '';
+              const inserted =
+                step.slice.content.size > 0
+                  ? step.slice.content.textBetween(0, step.slice.content.size, '\n')
+                  : '';
+
+              // Separamos el step en acciones atómicas para manejar reemplazos (donde borra e inserta al mismo tiempo)
+              const actions: Array<{ type: 'insert' | 'delete'; text: string }> = [];
+              if (deleted) actions.push({ type: 'delete', text: deleted });
+              if (inserted) actions.push({ type: 'insert', text: inserted });
+
+              for (const action of actions) {
+                const lastOp = newOps[newOps.length - 1];
+                let canceled = false;
+
+                // Verificación estricta de cancelación: ¿La acción invierte a la última operación?
+                // Requisito: Deben colisionar en la misma coordenada topológica y el texto debe ser idéntico.
+                if (lastOp && lastOp.position === from) {
+                  if (
+                    action.type === 'delete' &&
+                    lastOp.type === 'insert' &&
+                    lastOp.text === action.text
+                  ) {
+                    newOps.pop(); // Undo de una inserción
+                    canceled = true;
+                  } else if (
+                    action.type === 'insert' &&
+                    lastOp.type === 'delete' &&
+                    lastOp.text === action.text
+                  ) {
+                    newOps.pop(); // Undo de un borrado
+                    canceled = true;
+                  }
+                }
+
+                if (!canceled) {
+                  newOps.push({
+                    type: action.type,
+                    position: from,
+                    text: action.text,
+                    timestamp: now,
+                  });
                 }
               }
 
-              if (step.slice.content.size > 0) {
-                const inserted = step.slice.content.textBetween(0, step.slice.content.size, '\n');
-                if (inserted) {
-                  newOps.push({ type: 'insert', position: from, text: inserted, timestamp: now });
-                }
-              }
+              // Tras resolver el step, mapeamos todas las coordenadas al estado del documento
+              // tal como queda justo DESPUÉS de aplicarlo.
+              const stepMap = step.getMap();
+              newOps = newOps.map((op) => ({
+                ...op,
+                position: stepMap.map(op.position),
+              }));
+            });
 
-              newState.doc.forEach((node, offset) => {
-                if (step.from < offset + node.nodeSize && step.to > offset) {
-                  newModified.add(offset);
-                }
-              });
+            // Limitar memoria de operaciones
+            if (newOps.length > MAX_OPS) {
+              newOps = newOps.slice(-MAX_OPS);
+            }
+
+            // Recalcular los offsets modificados partiendo del nuevo documento.
+            // Si las operaciones de un bloque fueron anuladas por un Undo, el bloque no se añade.
+            const newModified = new Set<number>();
+            newState.doc.forEach((node, offset) => {
+              const blockEnd = offset + node.nodeSize;
+              const hasOp = newOps.some((op) => op.position >= offset && op.position < blockEnd);
+              if (hasOp) {
+                newModified.add(offset);
+              }
             });
 
             return {
               modifiedOffsets: newModified,
-              operations: [...prev.operations, ...newOps].slice(-MAX_OPS),
+              operations: newOps,
             };
           },
         },
