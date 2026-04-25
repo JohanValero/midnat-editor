@@ -1,7 +1,8 @@
 {
   "name": "Angular Workspace",
-  "image": "mcr.microsoft.com/devcontainers/javascript-node:22",
-
+  "dockerComposeFile": "docker-compose.yaml",
+  "service": "frontend",
+  "workspaceFolder": "/workspace",
   "features": {
     "ghcr.io/dirien/devcontainer-features/opencode:0": {
       "version": "latest"

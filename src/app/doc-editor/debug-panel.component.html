@@ -1,0 +1,116 @@
+<div class="dp">
+  <div class="dp__header">
+    <span class="dp__title">⚙ Debug</span>
+    <div class="dp__tabs">
+      @for (t of TABS; track t.id) {
+        <button
+          class="dp__tab"
+          [class.dp__tab--active]="activeTab() === t.id"
+          (click)="activeTab.set(t.id)"
+        >
+          {{ t.label }}
+        </button>
+      }
+    </div>
+    <button class="dp__close" (click)="closed.emit()" title="Cerrar panel">✕</button>
+  </div>
+
+  <!-- ── Cuerpo ─────────────────────────────────────────────── -->
+  <div class="dp__body">
+    <!-- PESTAÑA: Anotaciones -->
+    @if (activeTab() === 'annotations') {
+      @if (annotations.length === 0) {
+        <p class="dp__empty">Sin anotaciones. Pulsa <em>Analizar</em>.</p>
+      }
+      @for (ann of annotations; track ann.id) {
+        <div class="dp__row" (click)="logAnnotation(ann)" title="Clic para ver detalles en consola">
+          <span class="dp__badge" [class]="'dp__badge--' + ann.type">
+            {{ VISUAL[ann.type]?.label ?? ann.type }}
+          </span>
+          <code class="dp__code">{{ ann.start }}–{{ ann.end }}</code>
+          @if (ann.metadata?.['name']) {
+            <span class="dp__meta">{{ ann.metadata!['name'] }}</span>
+          }
+          <span class="dp__preview">{{ getAnnPreview(ann) }}</span>
+        </div>
+      }
+    }
+
+    <!-- PESTAÑA: Operaciones -->
+    @if (activeTab() === 'operations') {
+      @if (ops().length === 0) {
+        <p class="dp__empty">Sin operaciones registradas todavía.</p>
+      }
+      @for (op of ops(); track $index) {
+        <div
+          class="dp__row"
+          [class.dp__row--insert]="op.type === 'insert'"
+          [class.dp__row--delete]="op.type === 'delete'"
+        >
+          <span class="dp__op-sign">{{ op.type === 'insert' ? '+' : '−' }}</span>
+          <code class="dp__code">pos:{{ op.position }}</code>
+          <span class="dp__preview">
+            "{{ op.text.length > 40 ? op.text.slice(0, 40) + '…' : op.text }}"
+          </span>
+          <span class="dp__ts">{{ relativeTime(op.timestamp) }}</span>
+        </div>
+      }
+    }
+
+    <!-- PESTAÑA: Estructura del documento -->
+    @if (activeTab() === 'structure') {
+      @if (nodes().length === 0) {
+        <p class="dp__empty">Documento vacío.</p>
+      }
+      @for (n of nodes(); track n.index) {
+        <div class="dp__row" [class.dp__row--modified]="n.isModified">
+          <code class="dp__code">#{{ n.index }}</code>
+          <span class="dp__node-type">{{ n.type }}</span>
+          <code class="dp__code">off:{{ n.pmOffset }}</code>
+          <code class="dp__code">{{ n.charCount }}c</code>
+          @if (n.isModified) {
+            <span class="dp__flag dp__flag--mod">mod</span>
+          }
+          @if (n.annCount > 0) {
+            <span class="dp__flag dp__flag--ann">{{ n.annCount }} ann</span>
+          }
+          <span class="dp__preview">{{ n.preview }}</span>
+        </div>
+      }
+    }
+
+    <!-- PESTAÑA: Cursor -->
+    @if (activeTab() === 'cursor') {
+      @if (cursor(); as c) {
+        <div class="dp__kv">
+          <div class="dp__kv-row">
+            <span>Anchor PM</span><code>{{ c.anchorPm }}</code>
+          </div>
+          <div class="dp__kv-row">
+            <span>Head PM</span><code>{{ c.headPm }}</code>
+          </div>
+          <div class="dp__kv-row">
+            <span>Modo</span>
+            <code>{{ c.isRange ? 'selección' : 'cursor' }}</code>
+          </div>
+          <div class="dp__kv-row">
+            <span>Párrafo #</span><code>{{ c.paraIndex >= 0 ? c.paraIndex : '?' }}</code>
+          </div>
+          <div class="dp__kv-row">
+            <span>Char offset</span><code>{{ c.charOffset }}</code>
+          </div>
+          <div class="dp__kv-row dp__kv-row--block">
+            <span>Antes del cursor</span>
+            <code class="dp__ctx">…{{ c.textBefore }}</code>
+          </div>
+          <div class="dp__kv-row dp__kv-row--block">
+            <span>Después del cursor</span>
+            <code class="dp__ctx">{{ c.textAfter }}…</code>
+          </div>
+        </div>
+      } @else {
+        <p class="dp__empty">Editor no disponible.</p>
+      }
+    }
+  </div>
+</div>

@@ -1,6 +1,3 @@
-<!-- ══════════════════════════════════════════════════════════
-     BARRA DE HERRAMIENTAS
-     ══════════════════════════════════════════════════════════ -->
 <div class="toolbar">
   <div class="toolbar__brand">
     <svg class="toolbar__icon" viewBox="0 0 24 24" fill="currentColor">
@@ -13,7 +10,6 @@
 
   <div class="toolbar__separator"></div>
 
-  <!-- Abrir .docx -->
   <label class="toolbar__btn" title="Abrir .docx">
     <svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15">
       <path
@@ -26,7 +22,6 @@
 
   <div class="toolbar__separator"></div>
 
-  <!-- Analizar con LLM -->
   <button
     class="toolbar__btn"
     [disabled]="isEmpty() || isLoading() || isAnalyzing()"
@@ -70,10 +65,6 @@
 
   <div class="toolbar__separator"></div>
 
-  <!--
-    X-Ray Mode — intensifica los colores y añade chips de tipo
-    sobre cada anotación. El CSS usa .page--xray para aplicar los estilos.
-  -->
   <button
     class="toolbar__btn"
     [class.toolbar__btn--on]="xrayMode()"
@@ -88,10 +79,6 @@
     X-Ray
   </button>
 
-  <!--
-    Panel de debug — cuatro pestañas con estado interno en vivo.
-    La pestaña "Doc" es especialmente útil al cargar archivos complejos.
-  -->
   <button
     class="toolbar__btn"
     [class.toolbar__btn--on]="debugOpen()"
@@ -119,9 +106,6 @@
   }
 </div>
 
-<!-- ══════════════════════════════════════════════════════════
-     MENSAJES DE ESTADO
-     ══════════════════════════════════════════════════════════ -->
 @if (isLoading()) {
   <div class="status-bar status-bar--loading">Procesando documento…</div>
 }
@@ -132,9 +116,6 @@
   <div class="status-bar status-bar--error">{{ errorMsg() }}</div>
 }
 
-<!-- ══════════════════════════════════════════════════════════
-     LEYENDA
-     ══════════════════════════════════════════════════════════ -->
 @if (annotationCount() > 0) {
   <div class="legend">
     @for (item of legendItems; track item.type) {
@@ -153,12 +134,6 @@
   </div>
 }
 
-<!-- ══════════════════════════════════════════════════════════
-     TOOLTIP DE ANOTACIÓN
-     Posicionado fixed con transform translate(-50%, -100%)
-     para centrarlo sobre el span y elevarlo por encima.
-     pointer-events: none evita interferir con la edición.
-     ══════════════════════════════════════════════════════════ -->
 @if (tooltipVisible() && tooltipContent()) {
   <div class="ann-tooltip" [style.left.px]="tooltipPos().x" [style.top.px]="tooltipPos().y">
     <span class="ann-tooltip__label" [style.border-left-color]="tooltipContent()!.border">
@@ -170,14 +145,6 @@
   </div>
 }
 
-<!-- ══════════════════════════════════════════════════════════
-     ÁREA DE EDICIÓN
-
-     El div.page recibe la clase --xray cuando el modo está activo.
-     Los eventos de ratón se delegan al contenedor .desktop para
-     poder inspeccionar los spans de anotación que viven dentro
-     del DOM de ProseMirror (donde Angular no puede poner bindings).
-     ══════════════════════════════════════════════════════════ -->
 <div
   class="desktop"
   (mouseover)="onEditorMouseOver($event)"
@@ -197,10 +164,6 @@
   </div>
 </div>
 
-<!-- ══════════════════════════════════════════════════════════
-     PANEL DE DEBUG (montado fuera del .desktop para no
-     interferir con los event listeners del editor)
-     ══════════════════════════════════════════════════════════ -->
 @if (debugOpen()) {
   <app-debug-panel
     [annotations]="currentAnns()"

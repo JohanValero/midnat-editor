@@ -4,8 +4,6 @@ import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { Node as PmNode } from '@tiptap/pm/model';
 import { TextAnnotation } from './semantic-annotations.types';
 
-// ─── Estado del plugin ────────────────────────────────────────────────────────
-
 interface AnnotationPluginState {
   annotations: TextAnnotation[];
   decorations: DecorationSet;
@@ -13,11 +11,6 @@ interface AnnotationPluginState {
 
 export const ANNOTATION_KEY = new PluginKey<AnnotationPluginState>('semanticAnnotations');
 
-/**
- * Abreviaturas para el x-ray mode. Se escriben como data-ann-abbr en cada
- * <span> para que el pseudo-elemento ::before pueda leerlas con content: attr(…).
- * Son más cortas que los type names completos, lo que evita solapamientos visuales.
- */
 const ABBRS: Record<string, string> = {
   dialogue: 'DLG',
   beat: 'BT',
@@ -27,15 +20,6 @@ const ABBRS: Record<string, string> = {
   'internal-thought': 'PNS',
 };
 
-// ─── Conversión de offsets ────────────────────────────────────────────────────
-
-/**
- * Convierte un offset de carácter en fullText (bloques separados por '\n')
- * a una posición ProseMirror.
- *
- * Exportada para que el debug panel pueda calcular posiciones PM sin
- * duplicar la lógica.
- */
 export function charOffsetToPmPos(doc: PmNode, charOffset: number): number {
   let remaining = charOffset;
   let result = -1;
@@ -46,14 +30,12 @@ export function charOffsetToPmPos(doc: PmNode, charOffset: number): number {
     if (remaining <= len) {
       result = pmOffset + 1 + remaining;
     } else {
-      remaining -= len + 1; // +1 por el '\n' separador en fullText
+      remaining -= len + 1;
     }
   });
 
   return result >= 0 ? result : doc.content.size;
 }
-
-// ─── Construcción de decoraciones ────────────────────────────────────────────
 
 function buildDecorations(doc: PmNode, annotations: TextAnnotation[]): DecorationSet {
   const decos: Decoration[] = [];
@@ -68,7 +50,6 @@ function buildDecorations(doc: PmNode, annotations: TextAnnotation[]): Decoratio
         class: `ann ann--${ann.type}`,
         'data-ann-id': ann.id,
         'data-ann-type': ann.type,
-        // Abreviatura para x-ray mode (leída por ::before via CSS attr())
         'data-ann-abbr': ABBRS[ann.type] ?? ann.type.slice(0, 3).toUpperCase(),
         ...(ann.metadata ? { 'data-ann-meta': JSON.stringify(ann.metadata) } : {}),
       }),
@@ -77,8 +58,6 @@ function buildDecorations(doc: PmNode, annotations: TextAnnotation[]): Decoratio
 
   return DecorationSet.create(doc, decos);
 }
-
-// ─── La extensión ─────────────────────────────────────────────────────────────
 
 export const AnnotationHighlightExtension = Extension.create({
   name: 'annotationHighlight',
@@ -128,8 +107,6 @@ export const AnnotationHighlightExtension = Extension.create({
   },
 });
 
-// ─── API pública ──────────────────────────────────────────────────────────────
-
 export function setAnnotations(
   editor: { state: any; view: any },
   annotations: TextAnnotation[],
@@ -145,11 +122,6 @@ export function getAnnotationCount(editor: { state: any }): number {
   return ANNOTATION_KEY.getState(editor.state)?.annotations.length ?? 0;
 }
 
-/**
- * Devuelve la lista completa de anotaciones activas.
- * El debug panel y el componente la usan para mostrar detalles sin
- * tener que pasar el estado como prop en cada render.
- */
 export function getAnnotations(editor: { state: any }): TextAnnotation[] {
   return ANNOTATION_KEY.getState(editor.state)?.annotations ?? [];
 }

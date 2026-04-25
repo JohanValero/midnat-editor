@@ -3,8 +3,6 @@ import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { ReplaceStep } from '@tiptap/pm/transform';
 
-// ─── Tipos públicos ───────────────────────────────────────────────────────────
-
 export interface EditOperation {
   type: 'insert' | 'delete';
   position: number;
@@ -21,23 +19,15 @@ export interface LLMEditContext {
   modifiedParagraphCount: number;
 }
 
-/**
- * Exportado para que el debug panel y el componente puedan leer el estado
- * completo del plugin sin duplicar la lógica.
- */
 export interface TrackerState {
   modifiedOffsets: Set<number>;
   operations: EditOperation[];
 }
 
-// ─── Estado interno del plugin ────────────────────────────────────────────────
-
 export const TRACKER_KEY = new PluginKey<TrackerState>('changeTracker');
 
 const CONTEXT_WINDOW = 300;
 const MAX_OPS = 200;
-
-// ─── La extensión ─────────────────────────────────────────────────────────────
 
 export const ChangeTrackerExtension = Extension.create({
   name: 'changeTracker',
@@ -61,10 +51,7 @@ export const ChangeTrackerExtension = Extension.create({
             const now = Date.now();
             let newOps = [...prev.operations];
 
-            // Evaluar cada step de la transacción de forma aislada
             tr.steps.forEach((step, index) => {
-              // Si el step no reemplaza texto (ej. añadir una marca/formato), solo mapeamos
-              // las posiciones para asegurar que nada quede desfasado.
               if (!(step instanceof ReplaceStep)) {
                 const stepMap = step.getMap();
                 newOps = newOps.map((op) => ({
@@ -77,14 +64,12 @@ export const ChangeTrackerExtension = Extension.create({
               const stepDoc = tr.docs[index];
               const { from, to } = step;
 
-              // Extraer qué se está borrando y qué se está insertando
               const deleted = to > from ? stepDoc.textBetween(from, to, '\n') : '';
               const inserted =
                 step.slice.content.size > 0
                   ? step.slice.content.textBetween(0, step.slice.content.size, '\n')
                   : '';
 
-              // Separamos el step en acciones atómicas para manejar reemplazos (donde borra e inserta al mismo tiempo)
               const actions: Array<{ type: 'insert' | 'delete'; text: string }> = [];
               if (deleted) actions.push({ type: 'delete', text: deleted });
               if (inserted) actions.push({ type: 'insert', text: inserted });
@@ -93,22 +78,20 @@ export const ChangeTrackerExtension = Extension.create({
                 const lastOp = newOps[newOps.length - 1];
                 let canceled = false;
 
-                // Verificación estricta de cancelación: ¿La acción invierte a la última operación?
-                // Requisito: Deben colisionar en la misma coordenada topológica y el texto debe ser idéntico.
                 if (lastOp && lastOp.position === from) {
                   if (
                     action.type === 'delete' &&
                     lastOp.type === 'insert' &&
                     lastOp.text === action.text
                   ) {
-                    newOps.pop(); // Undo de una inserción
+                    newOps.pop();
                     canceled = true;
                   } else if (
                     action.type === 'insert' &&
                     lastOp.type === 'delete' &&
                     lastOp.text === action.text
                   ) {
-                    newOps.pop(); // Undo de un borrado
+                    newOps.pop();
                     canceled = true;
                   }
                 }
@@ -123,8 +106,6 @@ export const ChangeTrackerExtension = Extension.create({
                 }
               }
 
-              // Tras resolver el step, mapeamos todas las coordenadas al estado del documento
-              // tal como queda justo DESPUÉS de aplicarlo.
               const stepMap = step.getMap();
               newOps = newOps.map((op) => ({
                 ...op,
@@ -132,13 +113,10 @@ export const ChangeTrackerExtension = Extension.create({
               }));
             });
 
-            // Limitar memoria de operaciones
             if (newOps.length > MAX_OPS) {
               newOps = newOps.slice(-MAX_OPS);
             }
 
-            // Recalcular los offsets modificados partiendo del nuevo documento.
-            // Si las operaciones de un bloque fueron anuladas por un Undo, el bloque no se añade.
             const newModified = new Set<number>();
             newState.doc.forEach((node, offset) => {
               const blockEnd = offset + node.nodeSize;
@@ -178,16 +156,10 @@ export const ChangeTrackerExtension = Extension.create({
   },
 });
 
-// ─── API pública ──────────────────────────────────────────────────────────────
-
 export function getModifiedCount(editor: { state: any }): number {
   return TRACKER_KEY.getState(editor.state)?.modifiedOffsets.size ?? 0;
 }
 
-/**
- * Devuelve el estado completo del plugin de tracking.
- * Útil para el debug panel y para detectar primeras modificaciones.
- */
 export function getTrackerState(editor: { state: any }): TrackerState | undefined {
   return TRACKER_KEY.getState(editor.state);
 }

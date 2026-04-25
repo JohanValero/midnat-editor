@@ -23,15 +23,11 @@ import { LlmAnnotationService } from './llm-annotation.service';
 import { AnnotationType, ANNOTATION_VISUAL, TextAnnotation } from './semantic-annotations.types';
 import { DebugPanelComponent } from './debug-panel.component';
 
-// ─── Tipos de UI internos ─────────────────────────────────────────────────────
-
 interface TooltipContent {
   label: string;
   detail?: string;
   border: string;
 }
-
-// ─── Componente ───────────────────────────────────────────────────────────────
 
 @Component({
   selector: 'app-doc-editor',
@@ -42,7 +38,6 @@ interface TooltipContent {
   styleUrl: './doc-editor.scss',
 })
 export class DocEditor implements OnDestroy {
-  // ── Signals de estado del documento ──────────────────────────────────────
   protected isLoading = signal(false);
   protected errorMsg = signal<string | null>(null);
   protected wordCount = signal(0);
@@ -50,22 +45,15 @@ export class DocEditor implements OnDestroy {
   protected isEmpty = signal(true);
   protected isAnalyzing = signal(false);
   protected annotationCount = signal(0);
-
-  // ── Signals de modo de visualización ─────────────────────────────────────
-  protected xrayMode = signal(false); // X-ray: colores fuertes + chips de tipo
-  protected debugOpen = signal(false); // Panel de debug flotante
-
-  // ── Signals para el tooltip ───────────────────────────────────────────────
+  protected xrayMode = signal(false);
+  protected debugOpen = signal(false);
   protected tooltipVisible = signal(false);
   protected tooltipContent = signal<TooltipContent | null>(null);
   protected tooltipPos = signal({ x: 0, y: 0 });
-
-  // ── Datos que el debug panel necesita actualizados en cada transacción ────
   protected debugTick = signal(0);
   protected currentAnns = signal<TextAnnotation[]>([]);
   protected currentFullText = signal('');
 
-  // ── Leyenda ───────────────────────────────────────────────────────────────
   protected readonly legendItems = (
     Object.entries(ANNOTATION_VISUAL) as [
       AnnotationType,
@@ -73,19 +61,11 @@ export class DocEditor implements OnDestroy {
     ][]
   ).map(([type, v]) => ({ type, ...v }));
 
-  // ── Servicio ──────────────────────────────────────────────────────────────
   private readonly annotationSvc = inject(LlmAnnotationService);
 
-  // ── Snapshot de párrafos (para el logger de "línea original") ─────────────
-  //
-  // Al cargar un documento capturamos el texto de cada párrafo indexado por
-  // su posición en el array (no por PM offset, que puede cambiar al editar).
-  // Cuando una línea se modifica por primera vez, buscamos su índice actual
-  // en el documento y sacamos el texto original de este mapa.
-  private paragraphSnapshot = new Map<number, string>(); // index → texto original
-  private loggedParaIndices = new Set<number>(); // índices ya logueados
+  private paragraphSnapshot = new Map<number, string>();
+  private loggedParaIndices = new Set<number>();
 
-  // ── Editor TipTap ─────────────────────────────────────────────────────────
   readonly editor = new Editor({
     extensions: [
       StarterKit.configure({ codeBlock: false, blockquote: false, horizontalRule: false }),
@@ -97,20 +77,15 @@ export class DocEditor implements OnDestroy {
       attributes: { class: 'tiptap-content', spellcheck: 'true' },
     },
     onTransaction: ({ editor, transaction }) => {
-      // ── Actualización de signals estándar ────────────────────────────────
       this.wordCount.set(this.computeWordCount(editor));
       this.modifiedCount.set(getModifiedCount(editor));
       this.isEmpty.set(editor.isEmpty);
       this.annotationCount.set(getAnnotationCount(editor));
 
-      // ── Datos para el debug panel ────────────────────────────────────────
       this.currentAnns.set(getAnnotations(editor));
       this.currentFullText.set(buildLLMContext(editor).fullText);
       this.debugTick.set(this.debugTick() + 1);
 
-      // ── Logger de "línea original" ───────────────────────────────────────
-      // Solo actuamos cuando el documento realmente cambia para evitar
-      // detectar falsas primeras modificaciones en movimientos de cursor.
       if (transaction.docChanged) {
         this.logFirstModifications(editor);
       }
@@ -120,8 +95,6 @@ export class DocEditor implements OnDestroy {
   ngOnDestroy(): void {
     this.editor.destroy();
   }
-
-  // ─── Carga de archivo ─────────────────────────────────────────────────────
 
   protected async onFileSelected(event: Event): Promise<void> {
     const input = event.target as HTMLInputElement;
@@ -156,7 +129,6 @@ export class DocEditor implements OnDestroy {
     (this.editor.commands as any).clearHistory?.();
     clearAnnotations(this.editor);
 
-    // Capturamos el snapshot DESPUÉS de que el contenido esté en el editor
     this.captureParaSnapshot();
     this.loggedParaIndices.clear();
 
@@ -165,7 +137,6 @@ export class DocEditor implements OnDestroy {
     this.annotationCount.set(0);
     this.isEmpty.set(this.editor.isEmpty);
 
-    // ── Console: resumen de carga ────────────────────────────────────────
     const paraCount = this.paragraphSnapshot.size;
     console.groupCollapsed(
       '%c[Doc cargado]',
@@ -178,8 +149,6 @@ export class DocEditor implements OnDestroy {
     console.groupEnd();
   }
 
-  // ─── Análisis semántico ───────────────────────────────────────────────────
-
   protected async analyze(): Promise<void> {
     if (this.editor.isEmpty || this.isAnalyzing()) return;
 
@@ -191,7 +160,6 @@ export class DocEditor implements OnDestroy {
       const annotations = await this.annotationSvc.analyze(fullText);
       setAnnotations(this.editor, annotations);
 
-      // ── Console: tabla de resultados del LLM ──────────────────────────
       console.groupCollapsed(
         '%c[LLM Annotations]',
         'color:#a78bfa; font-weight:bold',
@@ -221,22 +189,10 @@ export class DocEditor implements OnDestroy {
     this.annotationCount.set(0);
   }
 
-  // ─── Tooltip (delegación de eventos en el área del editor) ────────────────
-
-  /**
-   * Usamos delegación de eventos en el contenedor `.desktop` en lugar de
-   * listeners por elemento porque el DOM del editor es gestionado por
-   * ProseMirror — Angular no puede poner bindings en sus nodos internos.
-   *
-   * `mouseover` se propaga desde el elemento más profundo hacia arriba.
-   * `closest('.ann')` sube el árbol hasta encontrar el span de anotación
-   * o devuelve null si el cursor está sobre texto no anotado.
-   */
   protected onEditorMouseOver(event: MouseEvent): void {
     const annEl = (event.target as HTMLElement).closest<HTMLElement>('.ann');
 
     if (!annEl) {
-      // El cursor salió de todos los spans de anotación
       this.tooltipVisible.set(false);
       return;
     }
@@ -252,7 +208,6 @@ export class DocEditor implements OnDestroy {
       detail: meta?.['name'] ?? meta?.['location'] ?? undefined,
       border: visual?.border ?? '#888',
     });
-    // Centramos el tooltip horizontalmente sobre el elemento anotado
     this.tooltipPos.set({ x: rect.left + rect.width / 2, y: rect.top });
     this.tooltipVisible.set(true);
   }
@@ -261,11 +216,6 @@ export class DocEditor implements OnDestroy {
     this.tooltipVisible.set(false);
   }
 
-  /**
-   * Clic sobre un span de anotación → log detallado en consola.
-   * Útil para inspeccionar rápidamente el contexto completo de una
-   * anotación sin abrir el panel de debug.
-   */
   protected onEditorClick(event: MouseEvent): void {
     const annEl = (event.target as HTMLElement).closest<HTMLElement>('.ann');
     if (!annEl) return;
@@ -277,10 +227,7 @@ export class DocEditor implements OnDestroy {
     const text = this.currentFullText().slice(ann.start, ann.end);
     const visual = ANNOTATION_VISUAL[ann.type as AnnotationType];
 
-    // Calculamos también las posiciones ProseMirror para el desarrollador
-    const from = annEl.getAttribute('data-ann-id')
-      ? this.editor.state.selection.anchor // valor indicativo
-      : -1;
+    const from = annEl.getAttribute('data-ann-id') ? this.editor.state.selection.anchor : -1;
 
     console.group(
       `%c[Click] ${visual?.label ?? ann.type}`,
@@ -296,19 +243,10 @@ export class DocEditor implements OnDestroy {
     console.groupEnd();
   }
 
-  // ─── API pública ──────────────────────────────────────────────────────────
-
   getLLMContext(): LLMEditContext {
     return buildLLMContext(this.editor);
   }
 
-  // ─── Helpers privados ─────────────────────────────────────────────────────
-
-  /**
-   * Detecta párrafos que se modifican por primera vez y loguea su texto
-   * original. Funciona comparando el conjunto de índices de párrafos
-   * marcados como modificados con los que ya hemos reportado antes.
-   */
   private logFirstModifications(editor: Editor): void {
     const tracker = getTrackerState(editor);
     if (!tracker) return;
@@ -335,7 +273,6 @@ export class DocEditor implements OnDestroy {
     });
   }
 
-  /** Guarda el texto de cada párrafo indexado por su posición ordinal. */
   private captureParaSnapshot(): void {
     this.paragraphSnapshot.clear();
     let idx = 0;
