@@ -10,7 +10,7 @@ import {
 import { Editor } from '@tiptap/core';
 import { EditOperation, getTrackerState } from './change-tracker.extension';
 import { TextAnnotation, ANNOTATION_VISUAL, AnnotationType } from './semantic-annotations.types';
-import { ChunkLog, ChunkStatus, LiveAnnotation } from './chunk-log.types';
+import { AnalysisType, ChunkLog, ChunkStatus, LiveAnnotation } from './chunk-log.types';
 
 type Tab = 'annotations' | 'operations' | 'structure' | 'cursor' | 'live';
 
@@ -34,6 +34,13 @@ interface CursorInfo {
   textAfter: string;
 }
 
+// Metadatos visuales por tipo de análisis, para badges e indicadores de estado
+const ANALYSIS_META: Record<AnalysisType, { icon: string; label: string; color: string }> = {
+  refs: { icon: '🔍', label: 'Referencias', color: '#34d399' },
+  blocks: { icon: '📄', label: 'Estructura', color: '#60a5fa' },
+  conversations: { icon: '💬', label: 'Conversaciones', color: '#f87171' },
+};
+
 @Component({
   selector: 'app-debug-panel',
   standalone: true,
@@ -50,6 +57,7 @@ export class DebugPanelComponent implements OnChanges {
   @Input() chunkLogs: ChunkLog[] = [];
 
   protected readonly VISUAL = ANNOTATION_VISUAL;
+  protected readonly ANALYSIS_META = ANALYSIS_META;
   protected readonly TABS: { id: Tab; label: string }[] = [
     { id: 'annotations', label: `Anots (${this.annotations.length})` },
     { id: 'operations', label: 'Ops' },
@@ -63,12 +71,7 @@ export class DebugPanelComponent implements OnChanges {
   protected nodes = signal<DocNodeInfo[]>([]);
   protected cursor = signal<CursorInfo | null>(null);
 
-  // Chunks expandidos a nivel de tarjeta
-  protected expandedChunks = signal(new Set<number>());
-
-  // Sub-secciones expandidas: clave = "{chunkIndex}:{section}"
-  // Secciones: "input" | "refs-think" | "refs-xml" | "blocks-think" | "blocks-xml"
-  // Todas están ocultas por defecto; el usuario las abre manualmente.
+  protected expandedChunks = signal(new Set<string>()); // clave = `${analysisType}:${index}`
   protected expandedSubs = signal(new Map<string, boolean>());
 
   ngOnChanges(changes: SimpleChanges): void {
@@ -79,15 +82,13 @@ export class DebugPanelComponent implements OnChanges {
       const prev: ChunkLog[] = changes['chunkLogs'].previousValue ?? [];
       const curr: ChunkLog[] = this.chunkLogs;
 
-      // Primera carga → activar pestaña Live
       if (curr.length === 1 && prev.length === 0) {
         this.activeTab.set('live');
-        this.expandedChunks.set(new Set([0]));
+        this.expandedChunks.set(new Set([this._chunkKey(curr[0])]));
       }
-      // Nuevo chunk → expandir su tarjeta automáticamente
       if (curr.length > prev.length) {
         const newest = curr[curr.length - 1];
-        this.expandedChunks.update((s) => new Set([...s, newest.index]));
+        this.expandedChunks.update((s) => new Set([...s, this._chunkKey(newest)]));
       }
     }
   }
@@ -143,30 +144,35 @@ export class DebugPanelComponent implements OnChanges {
     });
   }
 
-  // ── Chunk-level expand/collapse ──────────────────────────────────────────────
+  // ── Expand/collapse de tarjetas de chunk ────────────────────────────────────
 
-  protected isExpanded(index: number): boolean {
-    // Sin forzado: los chunks activos pueden colapsarse como cualquier otro
-    return this.expandedChunks().has(index);
+  /** Clave única para un ChunkLog: combina analysisType + index. */
+  protected _chunkKey(log: ChunkLog): string {
+    return `${log.analysisType}:${log.index}`;
   }
 
-  protected toggleExpand(index: number): void {
+  protected isExpanded(log: ChunkLog): boolean {
+    return this.expandedChunks().has(this._chunkKey(log));
+  }
+
+  protected toggleExpand(log: ChunkLog): void {
     this.expandedChunks.update((s) => {
+      const key = this._chunkKey(log);
       const next = new Set(s);
-      if (next.has(index)) next.delete(index);
-      else next.add(index);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
   }
 
-  // ── Sub-section expand/collapse (thinking, XML, input text) ─────────────────
+  // ── Expand/collapse de sub-secciones ────────────────────────────────────────
 
-  protected isSubExpanded(chunkIndex: number, section: string): boolean {
-    return this.expandedSubs().get(`${chunkIndex}:${section}`) ?? false;
+  protected isSubExpanded(log: ChunkLog, section: string): boolean {
+    return this.expandedSubs().get(`${this._chunkKey(log)}:${section}`) ?? false;
   }
 
-  protected toggleSub(chunkIndex: number, section: string): void {
-    const key = `${chunkIndex}:${section}`;
+  protected toggleSub(log: ChunkLog, section: string): void {
+    const key = `${this._chunkKey(log)}:${section}`;
     this.expandedSubs.update((m) => {
       const next = new Map(m);
       next.set(key, !(next.get(key) ?? false));
@@ -176,20 +182,11 @@ export class DebugPanelComponent implements OnChanges {
 
   // ── Helpers de presentación ──────────────────────────────────────────────────
 
-  /**
-   * Extrae el contenido del primer <title> del XML de bloques.
-   * Se llama desde la plantilla para mostrarlo como badge en la cabecera del chunk.
-   * Funciona aunque el XML sea parcial (streaming), siempre que </title> ya haya llegado.
-   */
-  protected extractTitle(blocksXml: string): string | null {
-    const m = blocksXml.match(/<title>([\s\S]*?)<\/title>/);
-    return m ? m[1].trim() : null;
-  }
-
-  /** Etiqueta de estado enriquecida con la pasada en curso. */
+  /** Icono + estado para la cabecera de la tarjeta de chunk. */
   protected statusLabel(log: ChunkLog): string {
-    if (log.status === 'thinking') return log.currentPass === 'refs' ? '🔍' : '🧠';
-    if (log.status === 'generating') return log.currentPass === 'refs' ? '⚙¹' : '⚙²';
+    const meta = ANALYSIS_META[log.analysisType];
+    if (log.status === 'thinking') return meta.icon; // animado en CSS
+    if (log.status === 'generating') return '⚙';
     if (log.status === 'done') return '✓';
     return '✗';
   }
@@ -232,9 +229,19 @@ export class DebugPanelComponent implements OnChanges {
     return ANNOTATION_VISUAL[type];
   }
 
+  /** Progreso global: fracción de chunks en estado 'done' o 'error'. */
   protected get overallProgress(): number {
     if (!this.chunkLogs.length) return 0;
     const done = this.chunkLogs.filter((l) => l.status === 'done' || l.status === 'error').length;
-    return Math.round((done / this.chunkLogs[0].total) * 100);
+    // El total real son los chunks del primer análisis que llegó; usamos
+    // el campo `total` del primer log como referencia.
+    const total = this.chunkLogs[0]?.total ?? 1;
+    return Math.round((done / total) * 100);
+  }
+
+  /** Extrae el texto del primer <title> del XML, si ya se generó. */
+  protected extractTitle(xmlContent: string): string | null {
+    const m = xmlContent.match(/<title>([\s\S]*?)<\/title>/);
+    return m ? m[1].trim() : null;
   }
 }

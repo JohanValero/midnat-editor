@@ -1,7 +1,11 @@
 import { Injectable } from '@angular/core';
 import { TextAnnotation } from './semantic-annotations.types';
+import { AnalysisType } from './chunk-log.types';
 
 // ── Protocolo SSE ─────────────────────────────────────────────────────────────
+// En v6 cada endpoint es una sola pasada, así que los eventos de token
+// ya no necesitan un campo `pass`. El cliente sabe qué pasada es porque
+// llamó a un método específico (analyzeRefsStream, etc.).
 
 export interface SseStartEvent {
   type: 'start';
@@ -13,33 +17,19 @@ export interface SseChunkStartEvent {
   chunk: number;
   total_chunks: number;
   preview: string;
-  /** v5: texto completo del chunk para el panel de debug. */
   inputText: string;
 }
 
-/** v5: señala el inicio de una pasada LLM. */
-export interface SsePassStartEvent {
-  type: 'pass_start';
-  chunk: number;
-  pass: 'refs' | 'blocks';
-}
-
-/** Token de razonamiento interno del modelo. */
 export interface SseThinkTokenEvent {
   type: 'think_token';
   chunk: number;
   token: string;
-  /** v5: identifica de qué pasada procede. */
-  pass: 'refs' | 'blocks';
 }
 
-/** Token XML real generado por el modelo. */
 export interface SseTokenEvent {
   type: 'token';
   chunk: number;
   token: string;
-  /** v5: identifica de qué pasada procede. */
-  pass: 'refs' | 'blocks';
 }
 
 export interface SseProgressEvent {
@@ -63,7 +53,6 @@ export interface SseDoneEvent {
 export type SseEvent =
   | SseStartEvent
   | SseChunkStartEvent
-  | SsePassStartEvent
   | SseThinkTokenEvent
   | SseTokenEvent
   | SseProgressEvent
@@ -76,16 +65,46 @@ export type SseEvent =
 export class LlmAnnotationService {
   readonly baseUrl = 'http://localhost:8000';
 
-  async *analyzeStream(fullText: string, enableThinking = false): AsyncGenerator<SseEvent> {
+  // ── Métodos públicos por endpoint ─────────────────────────────────────────
+
+  /** Extrae referencias: personajes, lugares y objetos narrativos. */
+  analyzeRefsStream(fullText: string, enableThinking = false): AsyncGenerator<SseEvent> {
+    return this._stream('/analyze/refs', fullText, enableThinking);
+  }
+
+  /**
+   * Clasifica la estructura narrativa: narración, pensamientos, títulos, cortes.
+   * Las líneas de diálogo puro son ignoradas por este endpoint.
+   */
+  analyzeBlocksStream(fullText: string, enableThinking = false): AsyncGenerator<SseEvent> {
+    return this._stream('/analyze/blocks', fullText, enableThinking);
+  }
+
+  /**
+   * Clasifica conversaciones: diálogo y atribuciones narrativas.
+   * Recomendado ejecutar después de analyzeBlocksStream para tener contexto de escenas,
+   * aunque funciona de forma independiente.
+   */
+  analyzeConversationsStream(fullText: string, enableThinking = false): AsyncGenerator<SseEvent> {
+    return this._stream('/analyze/conversations', fullText, enableThinking);
+  }
+
+  // ── Implementación base compartida ────────────────────────────────────────
+
+  private async *_stream(
+    path: string,
+    fullText: string,
+    enableThinking: boolean,
+  ): AsyncGenerator<SseEvent> {
     let response: Response;
     try {
-      response = await fetch(`${this.baseUrl}/analyze`, {
+      response = await fetch(`${this.baseUrl}${path}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fullText, enable_thinking: enableThinking }),
       });
     } catch (err) {
-      throw new Error(`No se pudo conectar con el backend (${this.baseUrl}): ${err}`);
+      throw new Error(`No se pudo conectar con el backend (${this.baseUrl}${path}): ${err}`);
     }
 
     if (!response.ok) {
@@ -128,12 +147,23 @@ export class LlmAnnotationService {
     }
   }
 
-  /** Compatibilidad hacia atrás. */
-  async analyze(fullText: string): Promise<TextAnnotation[]> {
+  /**
+   * Ejecuta los tres análisis en secuencia y acumula todas las anotaciones.
+   * Útil para análisis completo de un documento.
+   */
+  async analyzeAll(fullText: string, enableThinking = false): Promise<TextAnnotation[]> {
     const all: TextAnnotation[] = [];
-    for await (const ev of this.analyzeStream(fullText)) {
-      if (ev.type === 'progress' && ev.annotations?.length) {
-        all.push(...ev.annotations);
+    const streams: [AnalysisType, AsyncGenerator<SseEvent>][] = [
+      ['refs', this.analyzeRefsStream(fullText, enableThinking)],
+      ['blocks', this.analyzeBlocksStream(fullText, enableThinking)],
+      ['conversations', this.analyzeConversationsStream(fullText, enableThinking)],
+    ];
+
+    for (const [, stream] of streams) {
+      for await (const ev of stream) {
+        if (ev.type === 'progress' && ev.annotations?.length) {
+          all.push(...ev.annotations);
+        }
       }
     }
     return all;

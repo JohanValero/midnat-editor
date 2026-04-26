@@ -1,10 +1,10 @@
-import { Component, inject, OnDestroy, signal, ViewEncapsulation } from '@angular/core';
+import { Component, computed, inject, OnDestroy, signal, ViewEncapsulation } from '@angular/core';
 import { TiptapEditorDirective } from 'ngx-tiptap';
 import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import * as mammoth from 'mammoth';
 
-import { ChunkLog, ChunkStatus, LiveAnnotation } from './chunk-log.types';
+import { AnalysisType, ChunkLog, ChunkStatus, LiveAnnotation } from './chunk-log.types';
 import {
   buildLLMContext,
   ChangeTrackerExtension,
@@ -20,7 +20,7 @@ import {
   getAnnotations,
   setAnnotations,
 } from './annotation-highlight.extension';
-import { LlmAnnotationService } from './llm-annotation.service';
+import { LlmAnnotationService, SseEvent } from './llm-annotation.service';
 import { AnnotationType, ANNOTATION_VISUAL, TextAnnotation } from './semantic-annotations.types';
 import { DebugPanelComponent } from './debug-panel.component';
 
@@ -44,7 +44,6 @@ export class DocEditor implements OnDestroy {
   protected wordCount = signal(0);
   protected modifiedCount = signal(0);
   protected isEmpty = signal(true);
-  protected isAnalyzing = signal(false);
   protected annotationCount = signal(0);
   protected xrayMode = signal(false);
   protected debugOpen = signal(false);
@@ -54,10 +53,35 @@ export class DocEditor implements OnDestroy {
   protected debugTick = signal(0);
   protected currentAnns = signal<TextAnnotation[]>([]);
   protected currentFullText = signal('');
-  protected analyzeProgress = signal(0);
+
+  // ── Estado de cada análisis ─────────────────────────────────────────────────
+  protected isAnalyzingRefs = signal(false);
+  protected isAnalyzingBlocks = signal(false);
+  protected isAnalyzingConversations = signal(false);
+  protected progressRefs = signal(0);
+  protected progressBlocks = signal(0);
+  protected progressConversations = signal(0);
+
+  /** True si cualquiera de los tres análisis está en curso. */
+  protected readonly isAnalyzing = computed(
+    () => this.isAnalyzingRefs() || this.isAnalyzingBlocks() || this.isAnalyzingConversations(),
+  );
+
+  /** Progreso del análisis activo (0–100). Muestra el primero que esté activo. */
+  protected readonly analyzeProgress = computed(() => {
+    if (this.isAnalyzingRefs()) return this.progressRefs();
+    if (this.isAnalyzingBlocks()) return this.progressBlocks();
+    if (this.isAnalyzingConversations()) return this.progressConversations();
+    return 0;
+  });
 
   /** Activa el modo reasoning del LLM (DeepSeek-R1, QwQ, etc.). */
   protected enableThinking = signal(false);
+
+  /**
+   * Todos los ChunkLogs de los tres análisis, ordenados cronológicamente.
+   * Cada log lleva su `analysisType` para que el panel de debug los diferencie.
+   */
   protected chunkLogs = signal<ChunkLog[]>([]);
 
   protected readonly legendItems = (
@@ -68,6 +92,14 @@ export class DocEditor implements OnDestroy {
   ).map(([type, v]) => ({ type, ...v }));
 
   private readonly annotationSvc = inject(LlmAnnotationService);
+
+  /**
+   * Acumula las anotaciones de los tres análisis.
+   * Cada análisis añade las suyas y llama a setAnnotations() con el array completo,
+   * de modo que el editor siempre muestra la unión de todos los análisis ejecutados.
+   */
+  private accumulated: LiveAnnotation[] = [];
+
   private paragraphSnapshot = new Map<number, string>();
   private loggedParaIndices = new Set<number>();
 
@@ -99,6 +131,8 @@ export class DocEditor implements OnDestroy {
     this.editor.destroy();
   }
 
+  // ── Carga de archivo ────────────────────────────────────────────────────────
+
   protected async onFileSelected(event: Event): Promise<void> {
     const input = event.target as HTMLInputElement;
     if (!input.files?.length) return;
@@ -127,7 +161,11 @@ export class DocEditor implements OnDestroy {
     this.editor.commands.setContent(html, { emitUpdate: false });
     this.editor.view.dispatch(this.editor.state.tr.setMeta(TRACKER_KEY, { reset: true }));
     (this.editor.commands as any).clearHistory?.();
+
+    // Al cargar un documento nuevo, limpiamos todas las anotaciones acumuladas
+    this.accumulated = [];
     clearAnnotations(this.editor);
+    this.chunkLogs.set([]);
     this.captureParaSnapshot();
     this.loggedParaIndices.clear();
     this.wordCount.set(this.computeWordCount(this.editor));
@@ -147,25 +185,69 @@ export class DocEditor implements OnDestroy {
     console.groupEnd();
   }
 
-  protected async analyze(): Promise<void> {
+  // ── Análisis 1: Referencias ─────────────────────────────────────────────────
+
+  protected async analyzeRefs(): Promise<void> {
     if (this.editor.isEmpty || this.isAnalyzing()) return;
+    await this._runAnalysis('refs', this.isAnalyzingRefs, this.progressRefs, (ft) =>
+      this.annotationSvc.analyzeRefsStream(ft, this.enableThinking()),
+    );
+  }
 
-    this.isAnalyzing.set(true);
+  // ── Análisis 2: Estructura narrativa ────────────────────────────────────────
+
+  protected async analyzeBlocks(): Promise<void> {
+    if (this.editor.isEmpty || this.isAnalyzing()) return;
+    await this._runAnalysis('blocks', this.isAnalyzingBlocks, this.progressBlocks, (ft) =>
+      this.annotationSvc.analyzeBlocksStream(ft, this.enableThinking()),
+    );
+  }
+
+  // ── Análisis 3: Conversaciones ──────────────────────────────────────────────
+
+  protected async analyzeConversations(): Promise<void> {
+    if (this.editor.isEmpty || this.isAnalyzing()) return;
+    await this._runAnalysis(
+      'conversations',
+      this.isAnalyzingConversations,
+      this.progressConversations,
+      (ft) => this.annotationSvc.analyzeConversationsStream(ft, this.enableThinking()),
+    );
+  }
+
+  // ── Lógica de ejecución compartida ─────────────────────────────────────────
+
+  /**
+   * Gestiona el ciclo de vida completo de un análisis:
+   *  1. Activa la señal de carga correspondiente
+   *  2. Itera el stream SSE y actualiza chunkLogs en tiempo real
+   *  3. Acumula las anotaciones resultantes junto a las de análisis anteriores
+   *  4. Actualiza el editor con el conjunto completo de anotaciones
+   *
+   * El parámetro `analysisType` sirve para taggear los ChunkLogs y las
+   * LiveAnnotations, permitiendo al panel de debug diferenciar su origen.
+   */
+  private async _runAnalysis(
+    analysisType: AnalysisType,
+    isAnalyzingSignal: ReturnType<typeof signal<boolean>>,
+    progressSignal: ReturnType<typeof signal<number>>,
+    streamFn: (fullText: string) => AsyncGenerator<SseEvent>,
+  ): Promise<void> {
+    isAnalyzingSignal.set(true);
     this.errorMsg.set(null);
-    this.analyzeProgress.set(0);
-    this.chunkLogs.set([]);
-    clearAnnotations(this.editor);
+    progressSignal.set(0);
 
-    const accumulated: LiveAnnotation[] = [];
+    const { fullText } = buildLLMContext(this.editor);
+
+    // Las anotaciones de este análisis se añaden al acumulador global
+    const thisRunAnnotations: LiveAnnotation[] = [];
 
     try {
-      const { fullText } = buildLLMContext(this.editor);
-
-      for await (const event of this.annotationSvc.analyzeStream(fullText, this.enableThinking())) {
+      for await (const event of streamFn(fullText)) {
         switch (event.type) {
           case 'start':
             console.log(
-              `%c[LLM] Iniciando — ${event.total_chunks} chunks | thinking=${this.enableThinking()}`,
+              `%c[LLM/${analysisType}] Iniciando — ${event.total_chunks} chunks`,
               'color:#a78bfa; font-weight:bold',
             );
             break;
@@ -177,41 +259,22 @@ export class DocEditor implements OnDestroy {
                 index: event.chunk,
                 total: event.total_chunks,
                 preview: event.preview,
-                inputText: event.inputText, // v5
-                currentPass: null, // v5
-                refsThinkContent: '', // v5
-                refsXmlContent: '', // v5
-                blocksThinkContent: '', // v5
-                blocksXmlContent: '', // v5
+                inputText: event.inputText,
+                analysisType,
+                thinkContent: '',
+                xmlContent: '',
                 annotations: [],
                 status: 'thinking' as ChunkStatus,
               },
             ]);
-            this.analyzeProgress.set(Math.round((event.chunk / event.total_chunks) * 100));
-            break;
-
-          // v5: pasada nueva iniciada — actualizar currentPass
-          case 'pass_start':
-            this.chunkLogs.update((logs) =>
-              this.patchLog(logs, event.chunk, (log) => ({
-                ...log,
-                currentPass: event.pass,
-                status: 'thinking' as ChunkStatus,
-              })),
-            );
+            progressSignal.set(Math.round((event.chunk / event.total_chunks) * 100));
             break;
 
           case 'token':
             this.chunkLogs.update((logs) =>
-              this.patchLog(logs, event.chunk, (log) => ({
+              this._patchLog(logs, event.chunk, analysisType, (log) => ({
                 ...log,
-                // v5: enrutar al campo correcto según la pasada
-                refsXmlContent:
-                  event.pass === 'refs' ? log.refsXmlContent + event.token : log.refsXmlContent,
-                blocksXmlContent:
-                  event.pass === 'blocks'
-                    ? log.blocksXmlContent + event.token
-                    : log.blocksXmlContent,
+                xmlContent: log.xmlContent + event.token,
                 status: 'generating' as ChunkStatus,
               })),
             );
@@ -219,15 +282,9 @@ export class DocEditor implements OnDestroy {
 
           case 'think_token':
             this.chunkLogs.update((logs) =>
-              this.patchLog(logs, event.chunk, (log) => ({
+              this._patchLog(logs, event.chunk, analysisType, (log) => ({
                 ...log,
-                // v5: enrutar al campo correcto según la pasada
-                refsThinkContent:
-                  event.pass === 'refs' ? log.refsThinkContent + event.token : log.refsThinkContent,
-                blocksThinkContent:
-                  event.pass === 'blocks'
-                    ? log.blocksThinkContent + event.token
-                    : log.blocksThinkContent,
+                thinkContent: log.thinkContent + event.token,
                 status: 'thinking' as ChunkStatus,
               })),
             );
@@ -237,47 +294,46 @@ export class DocEditor implements OnDestroy {
             const tagged: LiveAnnotation[] = event.annotations.map((a) => ({
               ...a,
               chunkIndex: event.chunk,
+              analysisType,
             }));
             if (tagged.length) {
-              accumulated.push(...tagged);
-              setAnnotations(this.editor, [...accumulated]);
+              thisRunAnnotations.push(...tagged);
+              // Mostramos en el editor las anotaciones anteriores + las nuevas
+              setAnnotations(this.editor, [...this.accumulated, ...thisRunAnnotations]);
             }
             this.chunkLogs.update((logs) =>
-              this.patchLog(logs, event.chunk, (log) => ({
+              this._patchLog(logs, event.chunk, analysisType, (log) => ({
                 ...log,
                 annotations: tagged,
                 status: 'done' as ChunkStatus,
-                currentPass: null,
               })),
             );
-            const pct = Math.round(((event.chunk + 1) / event.total_chunks) * 100);
-            this.analyzeProgress.set(pct);
+            progressSignal.set(Math.round(((event.chunk + 1) / event.total_chunks) * 100));
             break;
           }
 
           case 'error':
             console.warn(
-              `%c[LLM] Error chunk ${event.chunk ?? '?'}: ${event.message}`,
+              `%c[LLM/${analysisType}] Error chunk ${event.chunk ?? '?'}: ${event.message}`,
               'color:#f87171',
             );
             this.chunkLogs.update((logs) =>
-              this.patchLog(logs, event.chunk ?? -1, (log) => ({
+              this._patchLog(logs, event.chunk ?? -1, analysisType, (log) => ({
                 ...log,
                 status: 'error' as ChunkStatus,
                 errorMessage: event.message,
-                currentPass: null,
               })),
             );
             break;
 
           case 'done':
-            this.analyzeProgress.set(100);
+            progressSignal.set(100);
             console.groupCollapsed(
-              `%c[LLM Annotations] ${event.total_annotations} anotaciones`,
+              `%c[LLM/${analysisType}] ${event.total_annotations} anotaciones`,
               'color:#a78bfa; font-weight:bold',
             );
             console.table(
-              accumulated.map((a) => ({
+              thisRunAnnotations.map((a) => ({
                 id: a.id,
                 tipo: a.type,
                 ini: a.start,
@@ -291,22 +347,31 @@ export class DocEditor implements OnDestroy {
             break;
         }
       }
+
+      // Una vez terminado el análisis, consolida sus anotaciones en el acumulador
+      this.accumulated.push(...thisRunAnnotations);
     } catch (err) {
-      this.errorMsg.set(`Error al analizar: ${err}`);
+      this.errorMsg.set(`Error al analizar [${analysisType}]: ${err}`);
     } finally {
-      this.isAnalyzing.set(false);
-      this.analyzeProgress.set(0);
+      isAnalyzingSignal.set(false);
+      progressSignal.set(0);
     }
   }
 
-  private patchLog(
+  /**
+   * Localiza el ChunkLog más reciente que coincida con chunk+analysisType y lo parchea.
+   * Usamos analysisType además del índice porque pueden convivir logs de distintos
+   * análisis con el mismo chunk.index (cada análisis recorre todos los chunks).
+   */
+  private _patchLog(
     logs: ChunkLog[],
     chunkIndex: number,
+    analysisType: AnalysisType,
     patch: (log: ChunkLog) => ChunkLog,
   ): ChunkLog[] {
     const updated = [...logs];
     for (let i = updated.length - 1; i >= 0; i--) {
-      if (updated[i].index === chunkIndex) {
+      if (updated[i].index === chunkIndex && updated[i].analysisType === analysisType) {
         updated[i] = patch(updated[i]);
         return updated;
       }
@@ -314,10 +379,16 @@ export class DocEditor implements OnDestroy {
     return updated;
   }
 
+  // ── Limpieza ────────────────────────────────────────────────────────────────
+
   protected onClearAnnotations(): void {
+    this.accumulated = [];
     clearAnnotations(this.editor);
     this.annotationCount.set(0);
+    this.chunkLogs.set([]);
   }
+
+  // ── Tooltip y eventos de editor ─────────────────────────────────────────────
 
   protected onEditorMouseOver(event: MouseEvent): void {
     const annEl = (event.target as HTMLElement).closest<HTMLElement>('.ann');
@@ -334,7 +405,7 @@ export class DocEditor implements OnDestroy {
 
     this.tooltipContent.set({
       label: visual?.label ?? type,
-      detail: meta?.['name'] ?? meta?.['location'] ?? undefined,
+      detail: meta?.['name'] ?? meta?.['location'] ?? meta?.['object'] ?? undefined,
       border: visual?.border ?? '#888',
     });
     this.tooltipPos.set({ x: rect.left + rect.width / 2, y: rect.top });
@@ -364,9 +435,7 @@ export class DocEditor implements OnDestroy {
     console.log('tipo:    ', ann.type);
     console.log('texto:   ', `"${text}"`);
     console.log('offsets: ', `char ${ann.start} → ${ann.end}`);
-    if (ann.metadata && Object.keys(ann.metadata).length) {
-      console.log('metadata:', ann.metadata);
-    }
+    if (ann.metadata && Object.keys(ann.metadata).length) console.log('metadata:', ann.metadata);
     console.groupEnd();
   }
 
@@ -391,7 +460,6 @@ export class DocEditor implements OnDestroy {
           'color:#94a3b8',
           original !== undefined ? `"${original}"` : '(párrafo nuevo)',
         );
-        console.log('Índice de párrafo:', paraIdx, '| PM offset actual:', pmOffset);
         console.groupEnd();
       }
       paraIdx++;

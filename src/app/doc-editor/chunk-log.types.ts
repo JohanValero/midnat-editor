@@ -1,19 +1,27 @@
 import { TextAnnotation } from './semantic-annotations.types';
 
-/** Anotación enriquecida con el índice del chunk que la generó. */
-export type LiveAnnotation = TextAnnotation & { chunkIndex: number };
+/** Anotación enriquecida con el índice del chunk y el análisis que la generó. */
+export type LiveAnnotation = TextAnnotation & {
+  chunkIndex: number;
+  analysisType: AnalysisType;
+};
 
 /** Estado del procesamiento de un chunk. */
 export type ChunkStatus = 'thinking' | 'generating' | 'done' | 'error';
 
-/** Nombre de la pasada LLM activa. */
-export type PassName = 'refs' | 'blocks';
+/**
+ * Tipo de análisis que generó este chunk.
+ * Cada endpoint tiene un tipo propio; las anotaciones de los tres conviven en el editor.
+ */
+export type AnalysisType = 'refs' | 'blocks' | 'conversations';
 
 /**
- * Registro completo de un chunk procesado por las dos pasadas LLM (v5).
+ * Registro de un chunk procesado por un endpoint (una sola pasada LLM).
  *
- * Cada pasada tiene su propio contenido de thinking y XML para facilitar
- * la depuración independiente de cada tarea (referencias vs bloques).
+ * La estructura es deliberadamente más simple que en v5: ya no hay dos pasadas
+ * (refs + blocks) dentro del mismo log. Cada endpoint genera sus propios ChunkLogs
+ * independientes, todos mezclados en el array compartido del componente pero
+ * diferenciados por `analysisType`.
  */
 export interface ChunkLog {
   index: number;
@@ -21,17 +29,12 @@ export interface ChunkLog {
   preview: string;
   /** Texto completo enviado al LLM — visible en el panel de debug. */
   inputText: string;
-  /** Pasada en curso; null antes del primer pass_start y tras el progress. */
-  currentPass: PassName | null;
-
-  // ── Pasada 1 — referencias ───────────────────────────────────────────
-  refsThinkContent: string; // razonamiento interno de la pasada refs
-  refsXmlContent: string; // XML <refs>…</refs> generado
-
-  // ── Pasada 2 — bloques narrativos ────────────────────────────────────
-  blocksThinkContent: string; // razonamiento interno de la pasada blocks
-  blocksXmlContent: string; // XML <annotations>…</annotations> generado
-
+  /** Qué endpoint generó este chunk. */
+  analysisType: AnalysisType;
+  /** Razonamiento interno del modelo (DeepSeek-R1, QwQ, etc.), si procede. */
+  thinkContent: string;
+  /** XML crudo devuelto por el modelo. */
+  xmlContent: string;
   annotations: LiveAnnotation[];
   status: ChunkStatus;
   errorMessage?: string;

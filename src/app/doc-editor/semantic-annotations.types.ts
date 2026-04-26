@@ -1,10 +1,10 @@
-// beat eliminado: las atribuciones de diálogo son narración.
-// title añadido: los títulos de capítulo/sección ahora son anotaciones visibles.
+// object-ref añadido: armas, artefactos, objetos con relevancia narrativa.
 export type AnnotationType =
   | 'dialogue'
   | 'narration'
   | 'character-ref'
   | 'location-ref'
+  | 'object-ref' // NUEVO
   | 'internal-thought'
   | 'scene-break'
   | 'title';
@@ -44,18 +44,22 @@ export const ANNOTATION_VISUAL: Record<AnnotationType, AnnotationVisual> = {
     color: 'rgba(253,230,138,0.35)',
     border: '#fbbf24',
   },
+  // Verde azulado para distinguirlo de location-ref (amarillo) y character-ref (verde)
+  'object-ref': {
+    label: 'Objeto',
+    color: 'rgba(103,232,249,0.20)',
+    border: '#22d3ee',
+  },
   'internal-thought': {
     label: 'Pensamiento',
     color: 'rgba(196,181,253,0.30)',
     border: '#a78bfa',
   },
-  // scene-break: start === end, nunca genera highlight visible.
   'scene-break': {
     label: 'Corte de escena',
     color: 'transparent',
     border: '#475569',
   },
-  // title: ámbar cálido, claramente distinto de location-ref (amarillo).
   title: {
     label: 'Título',
     color: 'rgba(234,179,8,0.18)',

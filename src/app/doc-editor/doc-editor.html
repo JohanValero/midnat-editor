@@ -22,40 +22,86 @@
 
   <div class="toolbar__separator"></div>
 
+  <!-- ── Botón 1: Referencias (personajes, lugares, objetos) ────────────────── -->
   <button
     class="toolbar__btn"
-    [disabled]="isEmpty() || isLoading() || isAnalyzing()"
-    (click)="analyze()"
-    title="Analizar semánticamente el documento"
+    [disabled]="isEmpty() || isAnalyzing()"
+    [class.toolbar__btn--active-refs]="isAnalyzingRefs()"
+    (click)="analyzeRefs()"
+    title="Buscar personajes, lugares y objetos narrativos"
   >
-    @if (isAnalyzing()) {
-      <div class="status-bar status-bar--analyzing">
-        @if (enableThinking()) {
-          🧠
-        }
-        Analizando…
-        @if (analyzeProgress() > 0) {
-          <span style="margin-left: 8px; opacity: 0.7">{{ analyzeProgress() }}%</span>
-          @if (chunkLogs().length > 0) {
-            <span style="margin-left: 6px; opacity: 0.5; font-size: 11px">
-              bloque {{ chunkLogs()[chunkLogs().length - 1].index + 1 }} /
-              {{ chunkLogs()[0].total }}
-            </span>
-          }
-        }
-      </div>
+    @if (isAnalyzingRefs()) {
+      <span class="toolbar__spinner toolbar__spinner--refs"></span>
+      Referencias…
+      @if (progressRefs() > 0) {
+        <span class="toolbar__progress">{{ progressRefs() }}%</span>
+      }
     } @else {
+      <!-- Icono de persona/red -->
       <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor">
         <path
-          d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5z"
+          d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"
         />
       </svg>
-      Analizar
+      Referencias
+    }
+  </button>
+
+  <!-- ── Botón 2: Estructura narrativa (narración, pensamiento, títulos) ────── -->
+  <button
+    class="toolbar__btn"
+    [disabled]="isEmpty() || isAnalyzing()"
+    [class.toolbar__btn--active-blocks]="isAnalyzingBlocks()"
+    (click)="analyzeBlocks()"
+    title="Clasificar estructura narrativa: narración, pensamientos, títulos, cortes de escena"
+  >
+    @if (isAnalyzingBlocks()) {
+      <span class="toolbar__spinner toolbar__spinner--blocks"></span>
+      Estructura…
+      @if (progressBlocks() > 0) {
+        <span class="toolbar__progress">{{ progressBlocks() }}%</span>
+      }
+    } @else {
+      <!-- Icono de documento/párrafos -->
+      <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor">
+        <path d="M14 17H4v2h10v-2zm6-8H4v2h16V9zM4 15h16v-2H4v2zM4 5v2h16V5H4z" />
+      </svg>
+      Estructura
+    }
+  </button>
+
+  <!-- ── Botón 3: Conversaciones (diálogo + atribuciones) ──────────────────── -->
+  <button
+    class="toolbar__btn"
+    [disabled]="isEmpty() || isAnalyzing()"
+    [class.toolbar__btn--active-conv]="isAnalyzingConversations()"
+    (click)="analyzeConversations()"
+    title="Extraer y clasificar conversaciones (diálogos + incisos narrativos).
+Recomendado: ejecutar Estructura antes para mejor contexto."
+  >
+    @if (isAnalyzingConversations()) {
+      <span class="toolbar__spinner toolbar__spinner--conv"></span>
+      Conversaciones…
+      @if (progressConversations() > 0) {
+        <span class="toolbar__progress">{{ progressConversations() }}%</span>
+      }
+    } @else {
+      <!-- Icono de burbuja de diálogo -->
+      <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor">
+        <path
+          d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"
+        />
+      </svg>
+      Conversaciones
     }
   </button>
 
   @if (annotationCount() > 0) {
-    <button class="toolbar__btn" (click)="onClearAnnotations()" title="Quitar anotaciones">
+    <button
+      class="toolbar__btn"
+      (click)="onClearAnnotations()"
+      title="Quitar todas las anotaciones"
+    >
       <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor">
         <path
           d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"
@@ -67,7 +113,7 @@
 
   <div class="toolbar__separator"></div>
 
-  <!-- Thinking toggle: activa el modo reasoning del LLM (DeepSeek-R1, QwQ…) -->
+  <!-- Thinking toggle -->
   <button
     class="toolbar__btn"
     [class.toolbar__btn--on]="enableThinking()"
@@ -127,9 +173,34 @@
 @if (isLoading()) {
   <div class="status-bar status-bar--loading">Procesando documento…</div>
 }
-@if (isAnalyzing()) {
-  <div class="status-bar status-bar--analyzing">Analizando con LLM…</div>
+
+<!-- Barra de progreso unificada: muestra el análisis activo -->
+@if (isAnalyzingRefs()) {
+  <div class="status-bar status-bar--analyzing status-bar--refs">
+    @if (enableThinking()) {
+      🧠
+    }
+    Buscando referencias… {{ progressRefs() > 0 ? progressRefs() + '%' : '' }}
+  </div>
 }
+@if (isAnalyzingBlocks()) {
+  <div class="status-bar status-bar--analyzing status-bar--blocks">
+    @if (enableThinking()) {
+      🧠
+    }
+    Analizando estructura narrativa… {{ progressBlocks() > 0 ? progressBlocks() + '%' : '' }}
+  </div>
+}
+@if (isAnalyzingConversations()) {
+  <div class="status-bar status-bar--analyzing status-bar--conv">
+    @if (enableThinking()) {
+      🧠
+    }
+    Extrayendo conversaciones…
+    {{ progressConversations() > 0 ? progressConversations() + '%' : '' }}
+  </div>
+}
+
 @if (errorMsg()) {
   <div class="status-bar status-bar--error">{{ errorMsg() }}</div>
 }
@@ -174,7 +245,8 @@
       <div class="page__empty">
         <p>
           Abre un archivo <strong>.docx</strong> o empieza a escribir.<br />
-          Luego pulsa <strong>Analizar</strong> para ver las anotaciones.
+          Luego usa <strong>Referencias</strong>, <strong>Estructura</strong> o
+          <strong>Conversaciones</strong> para analizar el documento.
         </p>
       </div>
     }
