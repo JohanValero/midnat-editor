@@ -308,13 +308,15 @@ tiptap-editor {
     background: rgba(252, 165, 165, 0.28);
     border-bottom: 1.5px solid #f87171;
   }
-  &--beat {
-    background: rgba(249, 168, 212, 0.28);
-    border-bottom: 1.5px solid #f472b6;
-  }
   &--narration {
     background: rgba(147, 197, 253, 0.2);
     border-bottom: 1.5px solid #60a5fa;
+  }
+  &--title {
+    background: rgba(234, 179, 8, 0.18);
+    border-bottom: 2px solid #ca8a04;
+    font-weight: 700;
+    font-style: normal;
   }
   &--character-ref {
     border-bottom: 2px solid #34d399;
@@ -340,11 +342,11 @@ tiptap-editor {
     &--dialogue {
       background: rgba(252, 165, 165, 0.5);
     }
-    &--beat {
-      background: rgba(249, 168, 212, 0.5);
-    }
     &--narration {
       background: rgba(147, 197, 253, 0.4);
+    }
+    &--title {
+      background: rgba(234, 179, 8, 0.38);
     }
     &--character-ref {
       background: rgba(110, 231, 183, 0.35);

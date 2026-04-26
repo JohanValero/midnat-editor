@@ -15,15 +15,14 @@
     <button class="dp__close" (click)="closed.emit()" title="Cerrar panel">✕</button>
   </div>
 
-  <!-- ── Cuerpo ─────────────────────────────────────────────── -->
   <div class="dp__body">
-    <!-- PESTAÑA: Anotaciones -->
+    <!-- ── Anotaciones ───────────────────────────────────────────── -->
     @if (activeTab() === 'annotations') {
       @if (annotations.length === 0) {
         <p class="dp__empty">Sin anotaciones. Pulsa <em>Analizar</em>.</p>
       }
       @for (ann of annotations; track ann.id) {
-        <div class="dp__row" (click)="logAnnotation(ann)" title="Clic para ver detalles en consola">
+        <div class="dp__row" (click)="logAnnotation(ann)">
           <span class="dp__badge" [class]="'dp__badge--' + ann.type">
             {{ VISUAL[ann.type]?.label ?? ann.type }}
           </span>
@@ -36,7 +35,7 @@
       }
     }
 
-    <!-- PESTAÑA: Operaciones -->
+    <!-- ── Operaciones ───────────────────────────────────────────── -->
     @if (activeTab() === 'operations') {
       @if (ops().length === 0) {
         <p class="dp__empty">Sin operaciones registradas todavía.</p>
@@ -57,7 +56,7 @@
       }
     }
 
-    <!-- PESTAÑA: Estructura del documento -->
+    <!-- ── Estructura ────────────────────────────────────────────── -->
     @if (activeTab() === 'structure') {
       @if (nodes().length === 0) {
         <p class="dp__empty">Documento vacío.</p>
@@ -79,7 +78,7 @@
       }
     }
 
-    <!-- PESTAÑA: Cursor -->
+    <!-- ── Cursor ────────────────────────────────────────────────── -->
     @if (activeTab() === 'cursor') {
       @if (cursor(); as c) {
         <div class="dp__kv">
@@ -90,8 +89,7 @@
             <span>Head PM</span><code>{{ c.headPm }}</code>
           </div>
           <div class="dp__kv-row">
-            <span>Modo</span>
-            <code>{{ c.isRange ? 'selección' : 'cursor' }}</code>
+            <span>Modo</span><code>{{ c.isRange ? 'selección' : 'cursor' }}</code>
           </div>
           <div class="dp__kv-row">
             <span>Párrafo #</span><code>{{ c.paraIndex >= 0 ? c.paraIndex : '?' }}</code>
@@ -100,17 +98,207 @@
             <span>Char offset</span><code>{{ c.charOffset }}</code>
           </div>
           <div class="dp__kv-row dp__kv-row--block">
-            <span>Antes del cursor</span>
-            <code class="dp__ctx">…{{ c.textBefore }}</code>
+            <span>Antes del cursor</span><code class="dp__ctx">…{{ c.textBefore }}</code>
           </div>
           <div class="dp__kv-row dp__kv-row--block">
-            <span>Después del cursor</span>
-            <code class="dp__ctx">{{ c.textAfter }}…</code>
+            <span>Después del cursor</span><code class="dp__ctx">{{ c.textAfter }}…</code>
           </div>
         </div>
       } @else {
         <p class="dp__empty">Editor no disponible.</p>
       }
+    }
+
+    <!-- ── Live ──────────────────────────────────────────────────── -->
+    @if (activeTab() === 'live') {
+      <div class="dp__live">
+        @if (chunkLogs.length === 0) {
+          <p class="dp__empty">Pulsa <em>Analizar</em> para ver la generación en tiempo real.</p>
+        }
+
+        @if (chunkLogs.length > 0) {
+          <div class="dp__live-progress">
+            <div class="dp__live-progress-fill" [style.width.%]="overallProgress"></div>
+            <span class="dp__live-progress-label">
+              {{ overallProgress }}% &nbsp;·&nbsp; {{ chunkLogs.length }} /
+              {{ chunkLogs[0].total }} bloques
+            </span>
+          </div>
+        }
+
+        @for (log of reversedLogs; track log.index) {
+          <div
+            class="dp__chunk"
+            [class.dp__chunk--active]="isActive(log)"
+            [class.dp__chunk--error]="log.status === 'error'"
+          >
+            <!-- ── Cabecera de chunk: siempre visible ────────────── -->
+            <div class="dp__chunk-header" (click)="toggleExpand(log.index)">
+              <span class="dp__chunk-num">#{{ log.index + 1 }}</span>
+
+              <span class="dp__chunk-status" [class]="'dp__chunk-status--' + log.status">
+                {{ statusLabel(log) }}
+              </span>
+
+              @if (log.currentPass && isActive(log)) {
+                <span class="dp__pass-badge" [class]="'dp__pass-badge--' + log.currentPass">
+                  {{ log.currentPass === 'refs' ? 'refs' : 'bloques' }}
+                </span>
+              }
+
+              @if (log.refsThinkContent || log.blocksThinkContent) {
+                <span class="dp__chunk-badge-think" title="Generó razonamiento interno">🧠</span>
+              }
+
+              <!-- Título extraído del XML de bloques (una vez generado) -->
+              @if (extractTitle(log.blocksXmlContent); as t) {
+                <span class="dp__chunk-title-badge" title="Título detectado">{{ t }}</span>
+              }
+
+              <span class="dp__chunk-preview">{{ log.preview }}</span>
+
+              @if (log.annotations.length > 0) {
+                <span class="dp__chunk-ann-badge">{{ log.annotations.length }}</span>
+              }
+
+              <span class="dp__chunk-chevron">{{ isExpanded(log.index) ? '▲' : '▼' }}</span>
+            </div>
+
+            <!-- ── Cuerpo expandido ───────────────────────────────── -->
+            @if (isExpanded(log.index)) {
+              <div class="dp__chunk-body">
+                <!-- INPUT TEXT ─────────────────────────────────────
+                     Colapsado por defecto: es largo y raramente se inspecciona.  -->
+                <div class="dp__section dp__section--input">
+                  <div
+                    class="dp__section-label dp__section-label--toggle"
+                    (click)="toggleSub(log.index, 'input')"
+                  >
+                    <span>📄 Texto enviado</span>
+                    <span class="dp__section-chars">{{ log.inputText.length }} chars</span>
+                    <span class="dp__sub-chevron">{{
+                      isSubExpanded(log.index, 'input') ? '▲' : '▼'
+                    }}</span>
+                  </div>
+                  @if (isSubExpanded(log.index, 'input')) {
+                    <pre class="dp__section-pre dp__section-pre--input">{{ log.inputText }}</pre>
+                  }
+                </div>
+
+                <!-- PASADA 1: REFS ──────────────────────────────────
+                     Thinking y XML colapsados por defecto.              -->
+                <div class="dp__section dp__section--refs">
+                  <div class="dp__section-label">🔍 Pasada 1 — Referencias</div>
+
+                  @if (log.refsThinkContent) {
+                    <div class="dp__sub-header" (click)="toggleSub(log.index, 'refs-think')">
+                      <span>🧠 Razonamiento</span>
+                      <span class="dp__sub-chars">{{ log.refsThinkContent.length }} chars</span>
+                      <span class="dp__sub-chevron">{{
+                        isSubExpanded(log.index, 'refs-think') ? '▲' : '▼'
+                      }}</span>
+                    </div>
+                    @if (isSubExpanded(log.index, 'refs-think')) {
+                      <pre
+                        class="dp__section-pre dp__section-pre--think">{{ log.refsThinkContent }}<span
+                        [class.dp__cursor]="log.status === 'thinking' && log.currentPass === 'refs'"> </span></pre>
+                    }
+                  }
+
+                  @if (log.refsXmlContent) {
+                    <div class="dp__sub-header" (click)="toggleSub(log.index, 'refs-xml')">
+                      <span>XML</span>
+                      <span class="dp__sub-chars">{{ log.refsXmlContent.length }} chars</span>
+                      <span class="dp__sub-chevron">{{
+                        isSubExpanded(log.index, 'refs-xml') ? '▲' : '▼'
+                      }}</span>
+                    </div>
+                    @if (isSubExpanded(log.index, 'refs-xml')) {
+                      <pre
+                        class="dp__section-pre dp__section-pre--xml">{{ log.refsXmlContent }}<span
+                        [class.dp__cursor]="log.status === 'generating' && log.currentPass === 'refs'"> </span></pre>
+                    }
+                  } @else if (!log.refsXmlContent && !log.refsThinkContent) {
+                    <p class="dp__section-pending">
+                      {{ log.currentPass === 'refs' ? 'Generando…' : 'Pendiente…' }}
+                    </p>
+                  }
+                </div>
+
+                <!-- PASADA 2: BLOCKS ────────────────────────────────
+                     Ídem: thinking y XML colapsados por defecto.        -->
+                <div class="dp__section dp__section--blocks">
+                  <div class="dp__section-label">📦 Pasada 2 — Bloques narrativos</div>
+
+                  @if (log.blocksThinkContent) {
+                    <div class="dp__sub-header" (click)="toggleSub(log.index, 'blocks-think')">
+                      <span>🧠 Razonamiento</span>
+                      <span class="dp__sub-chars">{{ log.blocksThinkContent.length }} chars</span>
+                      <span class="dp__sub-chevron">{{
+                        isSubExpanded(log.index, 'blocks-think') ? '▲' : '▼'
+                      }}</span>
+                    </div>
+                    @if (isSubExpanded(log.index, 'blocks-think')) {
+                      <pre
+                        class="dp__section-pre dp__section-pre--think">{{ log.blocksThinkContent }}<span
+                        [class.dp__cursor]="log.status === 'thinking' && log.currentPass === 'blocks'"> </span></pre>
+                    }
+                  }
+
+                  @if (log.blocksXmlContent) {
+                    <div class="dp__sub-header" (click)="toggleSub(log.index, 'blocks-xml')">
+                      <span>XML</span>
+                      <span class="dp__sub-chars">{{ log.blocksXmlContent.length }} chars</span>
+                      <span class="dp__sub-chevron">{{
+                        isSubExpanded(log.index, 'blocks-xml') ? '▲' : '▼'
+                      }}</span>
+                    </div>
+                    @if (isSubExpanded(log.index, 'blocks-xml')) {
+                      <pre
+                        class="dp__section-pre dp__section-pre--xml">{{ log.blocksXmlContent }}<span
+                        [class.dp__cursor]="log.status === 'generating' && log.currentPass === 'blocks'"> </span></pre>
+                    }
+                  } @else if (!log.blocksXmlContent && !log.blocksThinkContent) {
+                    <p class="dp__section-pending">
+                      {{ log.currentPass === 'blocks' ? 'Generando…' : 'Pendiente…' }}
+                    </p>
+                  }
+                </div>
+
+                <!-- ERROR ───────────────────────────────────────── -->
+                @if (log.status === 'error' && log.errorMessage) {
+                  <div class="dp__section dp__section--error">
+                    <div class="dp__section-label">✗ Error</div>
+                    <code class="dp__section-error-msg">{{ log.errorMessage }}</code>
+                  </div>
+                }
+
+                <!-- ANOTACIONES RESUELTAS ────────────────────────── -->
+                @if (log.annotations.length > 0) {
+                  <div class="dp__section dp__section--anns">
+                    <div class="dp__section-label">
+                      Anotaciones resueltas
+                      <span class="dp__section-chars">{{ log.annotations.length }}</span>
+                    </div>
+                    @for (ann of log.annotations; track ann.id) {
+                      <div class="dp__row" (click)="logAnnotation(ann)">
+                        <span class="dp__badge" [class]="'dp__badge--' + ann.type">
+                          {{ annVisual(ann.type).label }}
+                        </span>
+                        <code class="dp__code">{{ ann.start }}-{{ ann.end }}</code>
+                        @if (ann.metadata?.['name']) {
+                          <span class="dp__meta">{{ ann.metadata!['name'] }}</span>
+                        }
+                        <span class="dp__preview">{{ getAnnPreview(ann) }}</span>
+                      </div>
+                    }
+                  </div>
+                }
+              </div>
+            }
+          </div>
+        }
+      </div>
     }
   </div>
 </div>

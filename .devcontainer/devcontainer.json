@@ -3,6 +3,7 @@
   "dockerComposeFile": "docker-compose.yaml",
   "service": "frontend",
   "workspaceFolder": "/workspace",
+  "runArgs": ["-e", "COMPOSE_PROJECT_NAME=midnat-project"],
   "features": {
     "ghcr.io/dirien/devcontainer-features/opencode:0": {
       "version": "latest"
@@ -12,7 +13,7 @@
     {
       "type": "bind",
       "source": "${localEnv:USERPROFILE}/.config/opencode",
-      "target": "/home/vscode/.config/opencode"
+      "target": "/home/node/.config/opencode"
     }
   ],
   "customizations": {

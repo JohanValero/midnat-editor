@@ -1,10 +1,13 @@
+// beat eliminado: las atribuciones de diálogo son narración.
+// title añadido: los títulos de capítulo/sección ahora son anotaciones visibles.
 export type AnnotationType =
-  | 'dialogue' // Palabras dichas en voz alta
-  | 'beat' // Acción/atribución dentro del diálogo
-  | 'narration' // Prosa narrativa pura
-  | 'character-ref' // Referencia a un personaje
-  | 'location-ref' // Referencia a un lugar
-  | 'internal-thought'; // Pensamiento interno del personaje
+  | 'dialogue'
+  | 'narration'
+  | 'character-ref'
+  | 'location-ref'
+  | 'internal-thought'
+  | 'scene-break'
+  | 'title';
 
 export interface TextAnnotation {
   id: string;
@@ -26,11 +29,6 @@ export const ANNOTATION_VISUAL: Record<AnnotationType, AnnotationVisual> = {
     color: 'rgba(252,165,165,0.30)',
     border: '#f87171',
   },
-  beat: {
-    label: 'Beat',
-    color: 'rgba(249,168,212,0.30)',
-    border: '#f472b6',
-  },
   narration: {
     label: 'Narración',
     color: 'rgba(147,197,253,0.22)',
@@ -50,5 +48,17 @@ export const ANNOTATION_VISUAL: Record<AnnotationType, AnnotationVisual> = {
     label: 'Pensamiento',
     color: 'rgba(196,181,253,0.30)',
     border: '#a78bfa',
+  },
+  // scene-break: start === end, nunca genera highlight visible.
+  'scene-break': {
+    label: 'Corte de escena',
+    color: 'transparent',
+    border: '#475569',
+  },
+  // title: ámbar cálido, claramente distinto de location-ref (amarillo).
+  title: {
+    label: 'Título',
+    color: 'rgba(234,179,8,0.18)',
+    border: '#ca8a04',
   },
 };

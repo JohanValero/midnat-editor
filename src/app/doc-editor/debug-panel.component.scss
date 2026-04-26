@@ -2,12 +2,11 @@
   display: block;
 }
 
-/* Panel contenedor — posición fija en el lado derecho */
 .dp {
   position: fixed;
   right: 0;
   top: 44px;
-  width: 360px;
+  width: 380px;
   height: calc(100vh - 44px);
   background: #0d0d1a;
   color: #e2e8f0;
@@ -21,7 +20,6 @@
   box-shadow: -4px 0 20px rgba(0, 0, 0, 0.4);
 }
 
-/* Cabecera */
 .dp__header {
   display: flex;
   align-items: center;
@@ -78,7 +76,6 @@
   }
 }
 
-/* Cuerpo scrollable */
 .dp__body {
   flex: 1;
   overflow-y: auto;
@@ -87,7 +84,6 @@
   scrollbar-color: #1e1e3a #0d0d1a;
 }
 
-/* Estado vacío */
 .dp__empty {
   color: #334155;
   text-align: center;
@@ -100,7 +96,6 @@
   }
 }
 
-/* Fila genérica */
 .dp__row {
   display: flex;
   align-items: baseline;
@@ -108,13 +103,12 @@
   gap: 5px;
   padding: 4px 10px;
   border-bottom: 1px solid #0d0d1a;
-  cursor: pointer;
   border-left: 2px solid transparent;
+  cursor: pointer;
   transition: background 0.1s;
   &:hover {
     background: #13132a;
   }
-  /* Modificadores de estado */
   &--insert {
     border-left-color: #34d399;
   }
@@ -126,7 +120,6 @@
   }
 }
 
-/* Badge de tipo de anotación */
 .dp__badge {
   font-size: 9px;
   font-weight: 700;
@@ -135,14 +128,9 @@
   text-transform: uppercase;
   white-space: nowrap;
   flex-shrink: 0;
-
   &--dialogue {
     background: rgba(248, 113, 113, 0.2);
     color: #fca5a5;
-  }
-  &--beat {
-    background: rgba(244, 114, 182, 0.2);
-    color: #f9a8d4;
   }
   &--narration {
     background: rgba(96, 165, 250, 0.2);
@@ -160,6 +148,11 @@
     background: rgba(167, 139, 250, 0.2);
     color: #c4b5fd;
   }
+  // title: ámbar cálido, igual que el highlight en el editor
+  &--title {
+    background: rgba(234, 179, 8, 0.2);
+    color: #fde047;
+  }
 }
 
 .dp__code {
@@ -169,7 +162,6 @@
   white-space: nowrap;
   flex-shrink: 0;
 }
-
 .dp__meta {
   color: #6ee7b7;
   font-style: italic;
@@ -179,7 +171,6 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
 .dp__preview {
   color: #64748b;
   flex: 1;
@@ -189,7 +180,6 @@
   white-space: nowrap;
 }
 
-/* Operaciones */
 .dp__op-sign {
   font-size: 14px;
   font-weight: 700;
@@ -208,8 +198,6 @@
   flex-shrink: 0;
   margin-left: auto;
 }
-
-/* Estructura */
 .dp__node-type {
   color: #818cf8;
   font-weight: 700;
@@ -231,7 +219,6 @@
   }
 }
 
-/* Cursor info: lista clave-valor */
 .dp__kv {
   padding: 10px 12px;
   display: flex;
@@ -269,4 +256,307 @@
   word-break: break-all;
   margin-left: 6px;
   line-height: 1.6;
+}
+
+// ── Live tab ──────────────────────────────────────────────────────
+.dp__live {
+  display: flex;
+  flex-direction: column;
+}
+
+.dp__live-progress {
+  position: relative;
+  height: 18px;
+  background: #13132a;
+  border-bottom: 1px solid #1e1e3a;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.dp__live-progress-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: linear-gradient(90deg, #4c1d95, #a78bfa);
+  transition: width 0.5s ease;
+}
+.dp__live-progress-label {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  height: 100%;
+  padding: 0 8px;
+  font-size: 9px;
+  color: #c4b5fd;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+// ── Tarjeta de chunk ──────────────────────────────────────────────
+.dp__chunk {
+  border-bottom: 1px solid #0d0d1a;
+  transition: background 0.15s;
+  &--active {
+    border-left: 2px solid #a78bfa;
+    background: rgba(167, 139, 250, 0.04);
+  }
+  &--error {
+    border-left: 2px solid #f87171;
+  }
+}
+
+.dp__chunk-header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  cursor: pointer;
+  user-select: none;
+  &:hover {
+    background: #13132a;
+  }
+}
+.dp__chunk-num {
+  color: #334155;
+  font-size: 9px;
+  flex-shrink: 0;
+  width: 22px;
+}
+.dp__chunk-status {
+  font-size: 12px;
+  flex-shrink: 0;
+  &--done {
+    color: #34d399;
+    font-size: 10px;
+    font-weight: 700;
+  }
+  &--error {
+    color: #f87171;
+    font-size: 10px;
+    font-weight: 700;
+  }
+}
+.dp__chunk-badge-think {
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+// Badge del título detectado en el XML — ámbar para que coincida con la anotación
+.dp__chunk-title-badge {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  background: rgba(234, 179, 8, 0.18);
+  color: #fde047;
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dp__chunk-preview {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #475569;
+  font-size: 10px;
+  font-style: italic;
+}
+.dp__chunk-ann-badge {
+  background: rgba(167, 139, 250, 0.2);
+  color: #c4b5fd;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+.dp__chunk-chevron {
+  color: #334155;
+  font-size: 8px;
+  flex-shrink: 0;
+}
+
+.dp__pass-badge {
+  font-size: 8px;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+  &--refs {
+    background: rgba(52, 211, 153, 0.2);
+    color: #6ee7b7;
+  }
+  &--blocks {
+    background: rgba(96, 165, 250, 0.2);
+    color: #93c5fd;
+  }
+}
+
+.dp__chunk-body {
+  display: flex;
+  flex-direction: column;
+}
+
+// ── Secciones de contenido ────────────────────────────────────────
+.dp__section {
+  border-top: 1px solid #0d0d1a;
+  &--input {
+    background: rgba(15, 23, 42, 0.7);
+    border-left: 2px solid #334155;
+  }
+  &--refs {
+    background: rgba(6, 78, 59, 0.12);
+    border-left: 2px solid #065f46;
+  }
+  &--blocks {
+    background: rgba(15, 23, 42, 0.6);
+    border-left: 2px solid #1e3a5f;
+  }
+  &--error {
+    background: rgba(127, 29, 29, 0.15);
+    border-left: 2px solid #f87171;
+  }
+  &--anns {
+    background: transparent;
+  }
+}
+
+// Cabecera de sección (no colapsable — solo muestra nombre y contiene sub-headers)
+.dp__section-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 2px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #334155;
+  .dp__section--input & {
+    color: #475569;
+  }
+  .dp__section--refs & {
+    color: #10b981;
+  }
+  .dp__section--blocks & {
+    color: #3b82f6;
+  }
+  .dp__section--error & {
+    color: #f87171;
+  }
+  .dp__section--anns & {
+    color: #475569;
+  }
+
+  // Variante colapsable (solo usada en --input)
+  &--toggle {
+    cursor: pointer;
+    &:hover {
+      color: #e2e8f0;
+    }
+  }
+}
+.dp__section-chars {
+  font-weight: 400;
+  opacity: 0.65;
+  margin-left: auto;
+}
+
+// Sub-header colapsable (thinking, XML dentro de cada pasada)
+.dp__sub-header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px 3px 16px; // sangría para indicar jerarquía
+  font-size: 9px;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
+  user-select: none;
+  border-top: 1px dashed rgba(255, 255, 255, 0.04);
+  transition:
+    background 0.1s,
+    color 0.1s;
+  &:hover {
+    background: rgba(255, 255, 255, 0.03);
+    color: #e2e8f0;
+  }
+}
+.dp__sub-chars {
+  font-weight: 400;
+  opacity: 0.6;
+  margin-left: auto;
+  font-size: 9px;
+}
+.dp__sub-chevron {
+  color: #334155;
+  font-size: 8px;
+  flex-shrink: 0;
+}
+
+.dp__section-pending {
+  margin: 0;
+  padding: 4px 10px 5px;
+  color: #334155;
+  font-size: 9.5px;
+  font-style: italic;
+}
+
+.dp__section-error-msg {
+  display: block;
+  padding: 4px 10px 8px;
+  color: #fca5a5;
+  font-family: inherit;
+  font-size: 9.5px;
+  word-break: break-all;
+}
+
+// ── Pre con contenido del modelo ──────────────────────────────────
+.dp__section-pre {
+  margin: 0;
+  padding: 4px 10px 8px;
+  font-family: inherit;
+  font-size: 9.5px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  line-height: 1.6;
+  max-height: 200px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #1e1e3a transparent;
+  &--input {
+    color: #475569;
+    max-height: 160px;
+  }
+  &--think {
+    color: #c4b5fd;
+  }
+  &--xml {
+    color: #64748b;
+  }
+}
+
+// ── Cursor parpadeante ────────────────────────────────────────────
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+.dp__cursor {
+  display: inline-block;
+  width: 6px;
+  height: 1em;
+  background: currentColor;
+  animation: blink 0.9s step-end infinite;
+  vertical-align: text-bottom;
+  margin-left: 1px;
 }

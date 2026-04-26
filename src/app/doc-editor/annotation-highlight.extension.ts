@@ -11,13 +11,14 @@ interface AnnotationPluginState {
 
 export const ANNOTATION_KEY = new PluginKey<AnnotationPluginState>('semanticAnnotations');
 
+// Abreviaturas para el modo X-Ray. beat eliminado, title añadido.
 const ABBRS: Record<string, string> = {
   dialogue: 'DLG',
-  beat: 'BT',
   narration: 'NAR',
   'character-ref': 'PRS',
   'location-ref': 'LUG',
   'internal-thought': 'PNS',
+  title: 'TTL',
 };
 
 export function charOffsetToPmPos(doc: PmNode, charOffset: number): number {
@@ -75,25 +76,18 @@ export const AnnotationHighlightExtension = Extension.create({
 
           apply(tr, prev, _old, newState): AnnotationPluginState {
             const meta = tr.getMeta(ANNOTATION_KEY);
-
             if (meta?.annotations !== undefined) {
               return {
                 annotations: meta.annotations,
                 decorations: buildDecorations(newState.doc, meta.annotations),
               };
             }
-
             if (meta?.clear) {
               return { annotations: [], decorations: DecorationSet.empty };
             }
-
             if (tr.docChanged) {
-              return {
-                ...prev,
-                decorations: prev.decorations.map(tr.mapping, tr.doc),
-              };
+              return { ...prev, decorations: prev.decorations.map(tr.mapping, tr.doc) };
             }
-
             return prev;
           },
         },

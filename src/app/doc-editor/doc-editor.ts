@@ -4,6 +4,7 @@ import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import * as mammoth from 'mammoth';
 
+import { ChunkLog, ChunkStatus, LiveAnnotation } from './chunk-log.types';
 import {
   buildLLMContext,
   ChangeTrackerExtension,
@@ -53,6 +54,11 @@ export class DocEditor implements OnDestroy {
   protected debugTick = signal(0);
   protected currentAnns = signal<TextAnnotation[]>([]);
   protected currentFullText = signal('');
+  protected analyzeProgress = signal(0);
+
+  /** Activa el modo reasoning del LLM (DeepSeek-R1, QwQ, etc.). */
+  protected enableThinking = signal(false);
+  protected chunkLogs = signal<ChunkLog[]>([]);
 
   protected readonly legendItems = (
     Object.entries(ANNOTATION_VISUAL) as [
@@ -62,7 +68,6 @@ export class DocEditor implements OnDestroy {
   ).map(([type, v]) => ({ type, ...v }));
 
   private readonly annotationSvc = inject(LlmAnnotationService);
-
   private paragraphSnapshot = new Map<number, string>();
   private loggedParaIndices = new Set<number>();
 
@@ -81,11 +86,9 @@ export class DocEditor implements OnDestroy {
       this.modifiedCount.set(getModifiedCount(editor));
       this.isEmpty.set(editor.isEmpty);
       this.annotationCount.set(getAnnotationCount(editor));
-
       this.currentAnns.set(getAnnotations(editor));
       this.currentFullText.set(buildLLMContext(editor).fullText);
       this.debugTick.set(this.debugTick() + 1);
-
       if (transaction.docChanged) {
         this.logFirstModifications(editor);
       }
@@ -99,16 +102,13 @@ export class DocEditor implements OnDestroy {
   protected async onFileSelected(event: Event): Promise<void> {
     const input = event.target as HTMLInputElement;
     if (!input.files?.length) return;
-
     const file = input.files[0];
     if (!file.name.endsWith('.docx')) {
       this.errorMsg.set('Formato inválido. Solo se aceptan archivos .docx');
       return;
     }
-
     this.isLoading.set(true);
     this.errorMsg.set(null);
-
     try {
       await this.loadDocx(file);
     } catch (err) {
@@ -128,10 +128,8 @@ export class DocEditor implements OnDestroy {
     this.editor.view.dispatch(this.editor.state.tr.setMeta(TRACKER_KEY, { reset: true }));
     (this.editor.commands as any).clearHistory?.();
     clearAnnotations(this.editor);
-
     this.captureParaSnapshot();
     this.loggedParaIndices.clear();
-
     this.wordCount.set(this.computeWordCount(this.editor));
     this.modifiedCount.set(0);
     this.annotationCount.set(0);
@@ -154,34 +152,166 @@ export class DocEditor implements OnDestroy {
 
     this.isAnalyzing.set(true);
     this.errorMsg.set(null);
+    this.analyzeProgress.set(0);
+    this.chunkLogs.set([]);
+    clearAnnotations(this.editor);
+
+    const accumulated: LiveAnnotation[] = [];
 
     try {
       const { fullText } = buildLLMContext(this.editor);
-      const annotations = await this.annotationSvc.analyze(fullText);
-      setAnnotations(this.editor, annotations);
 
-      console.groupCollapsed(
-        '%c[LLM Annotations]',
-        'color:#a78bfa; font-weight:bold',
-        `${annotations.length} anotaciones`,
-      );
-      console.table(
-        annotations.map((a) => ({
-          id: a.id,
-          tipo: a.type,
-          ini: a.start,
-          fin: a.end,
-          chars: a.end - a.start,
-          texto: fullText.slice(a.start, a.end).slice(0, 50),
-          meta: JSON.stringify(a.metadata ?? {}),
-        })),
-      );
-      console.groupEnd();
+      for await (const event of this.annotationSvc.analyzeStream(fullText, this.enableThinking())) {
+        switch (event.type) {
+          case 'start':
+            console.log(
+              `%c[LLM] Iniciando — ${event.total_chunks} chunks | thinking=${this.enableThinking()}`,
+              'color:#a78bfa; font-weight:bold',
+            );
+            break;
+
+          case 'chunk_start':
+            this.chunkLogs.update((logs) => [
+              ...logs,
+              {
+                index: event.chunk,
+                total: event.total_chunks,
+                preview: event.preview,
+                inputText: event.inputText, // v5
+                currentPass: null, // v5
+                refsThinkContent: '', // v5
+                refsXmlContent: '', // v5
+                blocksThinkContent: '', // v5
+                blocksXmlContent: '', // v5
+                annotations: [],
+                status: 'thinking' as ChunkStatus,
+              },
+            ]);
+            this.analyzeProgress.set(Math.round((event.chunk / event.total_chunks) * 100));
+            break;
+
+          // v5: pasada nueva iniciada — actualizar currentPass
+          case 'pass_start':
+            this.chunkLogs.update((logs) =>
+              this.patchLog(logs, event.chunk, (log) => ({
+                ...log,
+                currentPass: event.pass,
+                status: 'thinking' as ChunkStatus,
+              })),
+            );
+            break;
+
+          case 'token':
+            this.chunkLogs.update((logs) =>
+              this.patchLog(logs, event.chunk, (log) => ({
+                ...log,
+                // v5: enrutar al campo correcto según la pasada
+                refsXmlContent:
+                  event.pass === 'refs' ? log.refsXmlContent + event.token : log.refsXmlContent,
+                blocksXmlContent:
+                  event.pass === 'blocks'
+                    ? log.blocksXmlContent + event.token
+                    : log.blocksXmlContent,
+                status: 'generating' as ChunkStatus,
+              })),
+            );
+            break;
+
+          case 'think_token':
+            this.chunkLogs.update((logs) =>
+              this.patchLog(logs, event.chunk, (log) => ({
+                ...log,
+                // v5: enrutar al campo correcto según la pasada
+                refsThinkContent:
+                  event.pass === 'refs' ? log.refsThinkContent + event.token : log.refsThinkContent,
+                blocksThinkContent:
+                  event.pass === 'blocks'
+                    ? log.blocksThinkContent + event.token
+                    : log.blocksThinkContent,
+                status: 'thinking' as ChunkStatus,
+              })),
+            );
+            break;
+
+          case 'progress': {
+            const tagged: LiveAnnotation[] = event.annotations.map((a) => ({
+              ...a,
+              chunkIndex: event.chunk,
+            }));
+            if (tagged.length) {
+              accumulated.push(...tagged);
+              setAnnotations(this.editor, [...accumulated]);
+            }
+            this.chunkLogs.update((logs) =>
+              this.patchLog(logs, event.chunk, (log) => ({
+                ...log,
+                annotations: tagged,
+                status: 'done' as ChunkStatus,
+                currentPass: null,
+              })),
+            );
+            const pct = Math.round(((event.chunk + 1) / event.total_chunks) * 100);
+            this.analyzeProgress.set(pct);
+            break;
+          }
+
+          case 'error':
+            console.warn(
+              `%c[LLM] Error chunk ${event.chunk ?? '?'}: ${event.message}`,
+              'color:#f87171',
+            );
+            this.chunkLogs.update((logs) =>
+              this.patchLog(logs, event.chunk ?? -1, (log) => ({
+                ...log,
+                status: 'error' as ChunkStatus,
+                errorMessage: event.message,
+                currentPass: null,
+              })),
+            );
+            break;
+
+          case 'done':
+            this.analyzeProgress.set(100);
+            console.groupCollapsed(
+              `%c[LLM Annotations] ${event.total_annotations} anotaciones`,
+              'color:#a78bfa; font-weight:bold',
+            );
+            console.table(
+              accumulated.map((a) => ({
+                id: a.id,
+                tipo: a.type,
+                ini: a.start,
+                fin: a.end,
+                chars: a.end - a.start,
+                chunk: a.chunkIndex,
+                texto: fullText.slice(a.start, a.end).slice(0, 50),
+              })),
+            );
+            console.groupEnd();
+            break;
+        }
+      }
     } catch (err) {
       this.errorMsg.set(`Error al analizar: ${err}`);
     } finally {
       this.isAnalyzing.set(false);
+      this.analyzeProgress.set(0);
     }
+  }
+
+  private patchLog(
+    logs: ChunkLog[],
+    chunkIndex: number,
+    patch: (log: ChunkLog) => ChunkLog,
+  ): ChunkLog[] {
+    const updated = [...logs];
+    for (let i = updated.length - 1; i >= 0; i--) {
+      if (updated[i].index === chunkIndex) {
+        updated[i] = patch(updated[i]);
+        return updated;
+      }
+    }
+    return updated;
   }
 
   protected onClearAnnotations(): void {
@@ -191,7 +321,6 @@ export class DocEditor implements OnDestroy {
 
   protected onEditorMouseOver(event: MouseEvent): void {
     const annEl = (event.target as HTMLElement).closest<HTMLElement>('.ann');
-
     if (!annEl) {
       this.tooltipVisible.set(false);
       return;
@@ -227,8 +356,6 @@ export class DocEditor implements OnDestroy {
     const text = this.currentFullText().slice(ann.start, ann.end);
     const visual = ANNOTATION_VISUAL[ann.type as AnnotationType];
 
-    const from = annEl.getAttribute('data-ann-id') ? this.editor.state.selection.anchor : -1;
-
     console.group(
       `%c[Click] ${visual?.label ?? ann.type}`,
       `color:${visual?.border ?? '#a78bfa'}; font-weight:bold`,
@@ -250,21 +377,19 @@ export class DocEditor implements OnDestroy {
   private logFirstModifications(editor: Editor): void {
     const tracker = getTrackerState(editor);
     if (!tracker) return;
-
     let paraIdx = 0;
     editor.state.doc.forEach((_, pmOffset) => {
       if (tracker.modifiedOffsets.has(pmOffset) && !this.loggedParaIndices.has(paraIdx)) {
         this.loggedParaIndices.add(paraIdx);
         const original = this.paragraphSnapshot.get(paraIdx);
-
         console.groupCollapsed(
           `%c[ORIGINAL] Párrafo #${paraIdx} — primera edición`,
           'color:#f59e0b; font-weight:bold',
         );
         console.log(
-          '%cTexto antes de cualquier cambio:',
+          '%cTexto antes:',
           'color:#94a3b8',
-          original !== undefined ? `"${original}"` : '(párrafo nuevo, sin snapshot)',
+          original !== undefined ? `"${original}"` : '(párrafo nuevo)',
         );
         console.log('Índice de párrafo:', paraIdx, '| PM offset actual:', pmOffset);
         console.groupEnd();

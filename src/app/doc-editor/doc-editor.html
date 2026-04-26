@@ -29,19 +29,21 @@
     title="Analizar semánticamente el documento"
   >
     @if (isAnalyzing()) {
-      <svg
-        viewBox="0 0 24 24"
-        width="13"
-        height="13"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2.5"
-        style="animation: spin 0.8s linear infinite"
-      >
-        <circle cx="12" cy="12" r="9" stroke-opacity="0.25" />
-        <path d="M12 3a9 9 0 0 1 9 9" stroke-linecap="round" />
-      </svg>
-      Analizando…
+      <div class="status-bar status-bar--analyzing">
+        @if (enableThinking()) {
+          🧠
+        }
+        Analizando…
+        @if (analyzeProgress() > 0) {
+          <span style="margin-left: 8px; opacity: 0.7">{{ analyzeProgress() }}%</span>
+          @if (chunkLogs().length > 0) {
+            <span style="margin-left: 6px; opacity: 0.5; font-size: 11px">
+              bloque {{ chunkLogs()[chunkLogs().length - 1].index + 1 }} /
+              {{ chunkLogs()[0].total }}
+            </span>
+          }
+        }
+      </div>
     } @else {
       <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor">
         <path
@@ -62,6 +64,22 @@
       Limpiar
     </button>
   }
+
+  <div class="toolbar__separator"></div>
+
+  <!-- Thinking toggle: activa el modo reasoning del LLM (DeepSeek-R1, QwQ…) -->
+  <button
+    class="toolbar__btn"
+    [class.toolbar__btn--on]="enableThinking()"
+    (click)="enableThinking.set(!enableThinking())"
+    [title]="
+      enableThinking()
+        ? 'Desactivar razonamiento interno del LLM'
+        : 'Activar razonamiento interno (DeepSeek-R1, QwQ…)'
+    "
+  >
+    🧠 Thinking
+  </button>
 
   <div class="toolbar__separator"></div>
 
@@ -170,6 +188,7 @@
     [fullText]="currentFullText()"
     [editor]="editor"
     [tick]="debugTick()"
+    [chunkLogs]="chunkLogs()"
     (closed)="debugOpen.set(false)"
   />
 }
