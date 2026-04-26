@@ -68,16 +68,20 @@ export class LlmAnnotationService {
   // ── Métodos públicos por endpoint ─────────────────────────────────────────
 
   /** Extrae referencias: personajes, lugares y objetos narrativos. */
-  analyzeRefsStream(fullText: string, enableThinking = false): AsyncGenerator<SseEvent> {
-    return this._stream('/analyze/refs', fullText, enableThinking);
+  analyzeRefsStream(fullText: string, enableThinking = false, chapterId?: number) {
+    return this._stream('/analyze/refs', fullText, enableThinking, chapterId);
   }
 
   /**
    * Clasifica la estructura narrativa: narración, pensamientos, títulos, cortes.
    * Las líneas de diálogo puro son ignoradas por este endpoint.
    */
-  analyzeBlocksStream(fullText: string, enableThinking = false): AsyncGenerator<SseEvent> {
-    return this._stream('/analyze/blocks', fullText, enableThinking);
+  analyzeBlocksStream(
+    fullText: string,
+    enableThinking = false,
+    chapterId?: number,
+  ): AsyncGenerator<SseEvent> {
+    return this._stream('/analyze/blocks', fullText, enableThinking, chapterId);
   }
 
   /**
@@ -85,8 +89,12 @@ export class LlmAnnotationService {
    * Recomendado ejecutar después de analyzeBlocksStream para tener contexto de escenas,
    * aunque funciona de forma independiente.
    */
-  analyzeConversationsStream(fullText: string, enableThinking = false): AsyncGenerator<SseEvent> {
-    return this._stream('/analyze/conversations', fullText, enableThinking);
+  analyzeConversationsStream(
+    fullText: string,
+    enableThinking = false,
+    chapterId?: number,
+  ): AsyncGenerator<SseEvent> {
+    return this._stream('/analyze/conversations', fullText, enableThinking, chapterId);
   }
 
   // ── Implementación base compartida ────────────────────────────────────────
@@ -95,13 +103,18 @@ export class LlmAnnotationService {
     path: string,
     fullText: string,
     enableThinking: boolean,
+    chapterId?: number,
   ): AsyncGenerator<SseEvent> {
     let response: Response;
     try {
       response = await fetch(`${this.baseUrl}${path}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fullText, enable_thinking: enableThinking }),
+        body: JSON.stringify({
+          fullText,
+          enable_thinking: enableThinking,
+          chapter_id: chapterId ?? null,
+        }),
       });
     } catch (err) {
       throw new Error(`No se pudo conectar con el backend (${this.baseUrl}${path}): ${err}`);

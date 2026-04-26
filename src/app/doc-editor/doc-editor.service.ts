@@ -1,3 +1,1 @@
-export class DocumentEditorService {
-    
-}
+export class DocumentEditorService {}

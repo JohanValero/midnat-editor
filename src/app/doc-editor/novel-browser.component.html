@@ -1,0 +1,212 @@
+<div class="nb">
+  <!-- ── Top bar ────────────────────────────────────────────────────── -->
+  <header class="nb__bar">
+    @if (view() === 'detail' && selectedNovel(); as novel) {
+      <button class="nb__back" (click)="backToLibrary()" title="Volver a la biblioteca">
+        ← Biblioteca
+      </button>
+      <span class="nb__bar-title">{{ novel.title }}</span>
+      <span class="nb__bar-author">{{ novel.author }}</span>
+    } @else {
+      <span class="nb__bar-title nb__bar-title--logo">📚 Mi Biblioteca</span>
+    }
+
+    <div class="nb__bar-actions">
+      @if (view() === 'detail') {
+        <button class="nb__btn nb__btn--ghost" (click)="addBlankChapter()">+ Capítulo</button>
+      } @else {
+        <label class="nb__btn nb__btn--ghost" title="Importar desde .docx">
+          📂 Importar .docx
+          <input type="file" accept=".docx" (change)="onDocxSelected($event)" hidden />
+        </label>
+        <button class="nb__btn nb__btn--primary" (click)="openNewModal()">+ Nueva novela</button>
+      }
+    </div>
+  </header>
+
+  <!-- ── Error ──────────────────────────────────────────────────────── -->
+  @if (errorMsg()) {
+    <div class="nb__error">{{ errorMsg() }}</div>
+  }
+
+  <!-- ── Loading skeleton ───────────────────────────────────────────── -->
+  @if (isLoading()) {
+    <div class="nb__loading">
+      <div class="nb__spinner"></div>
+      <span>Cargando…</span>
+    </div>
+  }
+
+  <!-- ══ Vista: BIBLIOTECA ═════════════════════════════════════════════ -->
+  @if (view() === 'library' && !isLoading()) {
+    @if (novels().length === 0) {
+      <div class="nb__empty">
+        <p class="nb__empty-icon">📖</p>
+        <p>Tu biblioteca está vacía.</p>
+        <p>Crea una nueva novela o importa un archivo <strong>.docx</strong>.</p>
+      </div>
+    }
+
+    <div class="nb__grid">
+      @for (novel of novels(); track novel.id) {
+        <article
+          class="nb__card"
+          (click)="openNovel(novel)"
+          [attr.title]="novel.description || novel.title"
+        >
+          <!-- Portada generada con el color de la novela -->
+          <div class="nb__cover" [style.background]="novel.cover_color">
+            <span class="nb__cover-initial">{{ novel.title.charAt(0) }}</span>
+          </div>
+
+          <div class="nb__card-body">
+            <h2 class="nb__card-title">{{ novel.title }}</h2>
+            @if (novel.author) {
+              <p class="nb__card-author">{{ novel.author }}</p>
+            }
+            @if (novel.description) {
+              <p class="nb__card-desc">{{ novel.description }}</p>
+            }
+            <div class="nb__card-meta">
+              <span>{{ novel.chapter_count }} cap.</span>
+              <span>{{ formatWords(novel.total_words) }}</span>
+              <span>{{ relativeDate(novel.updated_at) }}</span>
+            </div>
+          </div>
+
+          <button
+            class="nb__card-delete"
+            (click)="deleteNovel(novel, $event)"
+            title="Eliminar novela"
+          >
+            ✕
+          </button>
+        </article>
+      }
+    </div>
+  }
+
+  <!-- ══ Vista: DETALLE DE NOVELA (lista de capítulos) ════════════════ -->
+  @if (view() === 'detail' && !isLoading()) {
+    @if (chapters().length === 0) {
+      <div class="nb__empty">
+        <p class="nb__empty-icon">✍️</p>
+        <p>Esta novela no tiene capítulos todavía.</p>
+        <p>Pulsa <strong>+ Capítulo</strong> para añadir el primero.</p>
+      </div>
+    }
+
+    <ol class="nb__chapter-list">
+      @for (ch of chapters(); track ch.id) {
+        <li class="nb__chapter" (click)="selectChapter(ch)">
+          <div class="nb__chapter-order">{{ ch.order_index + 1 }}</div>
+
+          <div class="nb__chapter-info">
+            <span class="nb__chapter-title">{{ ch.title }}</span>
+
+            <div class="nb__chapter-badges">
+              @if (ch.has_summary) {
+                <span class="nb__badge nb__badge--summary" title="Tiene resumen">💡 resumen</span>
+              }
+              @if (ch.annotation_count > 0) {
+                <span class="nb__badge nb__badge--ann">{{ ch.annotation_count }} ann</span>
+              }
+            </div>
+
+            <div class="nb__chapter-meta">
+              <span>{{ formatWords(ch.word_count) }}</span>
+              <span>{{ relativeDate(ch.updated_at) }}</span>
+            </div>
+
+            @if (ch.summary) {
+              <p class="nb__chapter-summary">{{ ch.summary }}</p>
+            }
+          </div>
+
+          <div class="nb__chapter-actions">
+            <button
+              class="nb__btn nb__btn--open"
+              (click)="selectChapter(ch)"
+              title="Abrir capítulo"
+            >
+              Editar →
+            </button>
+            <button
+              class="nb__chapter-delete"
+              (click)="deleteChapter(ch, $event)"
+              title="Eliminar capítulo"
+            >
+              ✕
+            </button>
+          </div>
+        </li>
+      }
+    </ol>
+  }
+</div>
+
+<!-- ══ Modal: Nueva novela ══════════════════════════════════════════════ -->
+@if (showNewModal()) {
+  <div class="nb__overlay" (click)="showNewModal.set(false)">
+    <div class="nb__modal" (click)="$event.stopPropagation()">
+      <h2 class="nb__modal-title">Nueva novela</h2>
+
+      <div class="nb__field">
+        <label>Título <span class="nb__required">*</span></label>
+        <input
+          class="nb__input"
+          [value]="newTitle()"
+          (input)="newTitle.set($any($event.target).value)"
+          placeholder="El nombre de tu novela"
+          autofocus
+        />
+      </div>
+
+      <div class="nb__field">
+        <label>Autor / a</label>
+        <input
+          class="nb__input"
+          [value]="newAuthor()"
+          (input)="newAuthor.set($any($event.target).value)"
+          placeholder="Tu nombre"
+        />
+      </div>
+
+      <div class="nb__field">
+        <label>Descripción</label>
+        <textarea
+          class="nb__input nb__input--textarea"
+          [value]="newDesc()"
+          (input)="newDesc.set($any($event.target).value)"
+          placeholder="Una breve sinopsis…"
+          rows="3"
+        ></textarea>
+      </div>
+
+      <div class="nb__field">
+        <label>Color de portada</label>
+        <div class="nb__color-row">
+          @for (color of coverColors; track color) {
+            <button
+              class="nb__color-swatch"
+              [style.background]="color"
+              [class.nb__color-swatch--active]="newColor() === color"
+              (click)="newColor.set(color)"
+            ></button>
+          }
+        </div>
+      </div>
+
+      <div class="nb__modal-actions">
+        <button class="nb__btn nb__btn--ghost" (click)="showNewModal.set(false)">Cancelar</button>
+        <button
+          class="nb__btn nb__btn--primary"
+          [disabled]="!newTitle().trim()"
+          (click)="createBlankNovel()"
+        >
+          Crear novela
+        </button>
+      </div>
+    </div>
+  </div>
+}

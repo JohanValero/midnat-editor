@@ -1,0 +1,554 @@
+// ── Paleta ─────────────────────────────────────────────────────────────────────
+$bg: #0e0e1a;
+$bg-card: #15152a;
+$bg-hover: #1c1c35;
+$border: #1e1e3a;
+$text: #e2e8f0;
+$text-muted: #64748b;
+$accent: #a78bfa;
+$accent-dim: rgba(167, 139, 250, 0.15);
+$danger: #f87171;
+$success: #34d399;
+
+:host {
+  display: block;
+}
+
+// ── Shell ──────────────────────────────────────────────────────────────────────
+
+.nb {
+  min-height: 100vh;
+  background: $bg;
+  color: $text;
+  font-family: 'Calibri', 'Segoe UI', Arial, sans-serif;
+  font-size: 14px;
+}
+
+// ── Top bar ────────────────────────────────────────────────────────────────────
+
+.nb__bar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 28px;
+  height: 52px;
+  background: #0a0a15;
+  border-bottom: 1px solid $border;
+  backdrop-filter: blur(8px);
+}
+
+.nb__back {
+  border: none;
+  background: transparent;
+  color: $accent;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  &:hover {
+    background: $accent-dim;
+  }
+}
+
+.nb__bar-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: $text;
+  flex-shrink: 0;
+  &--logo {
+    color: $accent;
+    letter-spacing: 0.3px;
+  }
+}
+
+.nb__bar-author {
+  color: $text-muted;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.nb__bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+// ── Botones ────────────────────────────────────────────────────────────────────
+
+.nb__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  transition:
+    background 0.15s,
+    opacity 0.15s;
+
+  &--primary {
+    background: $accent;
+    color: #fff;
+    font-weight: 600;
+    &:hover:not(:disabled) {
+      background: lighten(#a78bfa, 8%);
+    }
+    &:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+  }
+
+  &--ghost {
+    background: $accent-dim;
+    color: $accent;
+    &:hover {
+      background: rgba(167, 139, 250, 0.25);
+    }
+  }
+
+  &--open {
+    background: transparent;
+    color: $accent;
+    font-size: 12px;
+    padding: 4px 10px;
+    border: 1px solid $border;
+    &:hover {
+      background: $accent-dim;
+    }
+  }
+}
+
+// ── Error / Loading ────────────────────────────────────────────────────────────
+
+.nb__error {
+  background: rgba(248, 113, 113, 0.12);
+  color: $danger;
+  border-bottom: 1px solid rgba(248, 113, 113, 0.3);
+  padding: 8px 28px;
+  font-size: 13px;
+}
+
+.nb__loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 80px 0;
+  color: $text-muted;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.nb__spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid $border;
+  border-top-color: $accent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+// ── Empty state ────────────────────────────────────────────────────────────────
+
+.nb__empty {
+  text-align: center;
+  padding: 80px 20px;
+  color: $text-muted;
+  line-height: 1.8;
+  strong {
+    color: $text;
+  }
+}
+
+.nb__empty-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+}
+
+// ── Grid de novelas (Wattpad-style) ────────────────────────────────────────────
+
+.nb__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 24px;
+  padding: 28px;
+}
+
+.nb__card {
+  position: relative;
+  background: $bg-card;
+  border: 1px solid $border;
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
+  transition:
+    transform 0.2s,
+    box-shadow 0.2s,
+    border-color 0.2s;
+
+  &:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    border-color: $accent;
+  }
+}
+
+.nb__cover {
+  height: 140px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+
+  // Patrón de textura sutil
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(160deg, rgba(255, 255, 255, 0.08) 0%, transparent 60%);
+  }
+}
+
+.nb__cover-initial {
+  font-size: 64px;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.35);
+  line-height: 1;
+  user-select: none;
+  position: relative;
+  z-index: 1;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.nb__card-body {
+  padding: 12px 14px 14px;
+}
+
+.nb__card-title {
+  font-size: 14px;
+  font-weight: 700;
+  margin: 0 0 2px;
+  color: $text;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nb__card-author {
+  font-size: 12px;
+  color: $accent;
+  margin: 0 0 4px;
+  font-style: italic;
+}
+
+.nb__card-desc {
+  font-size: 11px;
+  color: $text-muted;
+  margin: 0 0 8px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.nb__card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 11px;
+  color: $text-muted;
+
+  span::after {
+    content: '·';
+    margin-left: 6px;
+  }
+  span:last-child::after {
+    content: '';
+  }
+}
+
+.nb__card-delete {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.5);
+  color: $text-muted;
+  font-size: 11px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition:
+    opacity 0.15s,
+    color 0.15s;
+
+  .nb__card:hover & {
+    opacity: 1;
+  }
+  &:hover {
+    color: $danger;
+  }
+}
+
+// ── Lista de capítulos ─────────────────────────────────────────────────────────
+
+.nb__chapter-list {
+  list-style: none;
+  margin: 0;
+  padding: 16px 28px 60px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 860px;
+}
+
+.nb__chapter {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 14px 16px;
+  background: $bg-card;
+  border: 1px solid $border;
+  border-radius: 10px;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+
+  &:hover {
+    background: $bg-hover;
+    border-color: $accent;
+  }
+}
+
+.nb__chapter-order {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: $accent-dim;
+  color: $accent;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 2px;
+}
+
+.nb__chapter-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.nb__chapter-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: $text;
+  display: block;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nb__chapter-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 4px;
+}
+
+.nb__badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 10px;
+
+  &--summary {
+    background: rgba(52, 211, 153, 0.15);
+    color: $success;
+  }
+
+  &--ann {
+    background: $accent-dim;
+    color: $accent;
+  }
+}
+
+.nb__chapter-meta {
+  display: flex;
+  gap: 10px;
+  font-size: 11px;
+  color: $text-muted;
+  margin-bottom: 4px;
+
+  span::after {
+    content: '·';
+    margin-left: 10px;
+  }
+  span:last-child::after {
+    content: '';
+  }
+}
+
+.nb__chapter-summary {
+  font-size: 12px;
+  color: $text-muted;
+  margin: 6px 0 0;
+  font-style: italic;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.5;
+}
+
+.nb__chapter-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.nb__chapter-delete {
+  border: none;
+  background: transparent;
+  color: $text-muted;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  opacity: 0;
+  transition:
+    opacity 0.15s,
+    color 0.15s;
+
+  .nb__chapter:hover & {
+    opacity: 1;
+  }
+  &:hover {
+    color: $danger;
+  }
+}
+
+// ── Modal ──────────────────────────────────────────────────────────────────────
+
+.nb__overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nb__modal {
+  background: #13132a;
+  border: 1px solid $border;
+  border-radius: 14px;
+  padding: 28px 32px;
+  width: 400px;
+  max-width: 95vw;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.nb__modal-title {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0 0 20px;
+  color: $text;
+}
+
+.nb__field {
+  margin-bottom: 16px;
+  label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: $text-muted;
+    margin-bottom: 5px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+}
+
+.nb__required {
+  color: $danger;
+}
+
+.nb__input {
+  width: 100%;
+  box-sizing: border-box;
+  background: #0d0d1a;
+  border: 1px solid $border;
+  border-radius: 6px;
+  color: $text;
+  font-family: inherit;
+  font-size: 13px;
+  padding: 8px 10px;
+  outline: none;
+  transition: border-color 0.15s;
+
+  &:focus {
+    border-color: $accent;
+  }
+  &--textarea {
+    resize: vertical;
+    min-height: 70px;
+  }
+}
+
+.nb__color-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.nb__color-swatch {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition:
+    transform 0.15s,
+    border-color 0.15s;
+
+  &:hover {
+    transform: scale(1.15);
+  }
+  &--active {
+    border-color: #fff;
+    transform: scale(1.15);
+  }
+}
+
+.nb__modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 24px;
+}

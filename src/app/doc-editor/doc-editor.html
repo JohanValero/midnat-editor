@@ -1,28 +1,67 @@
 <div class="toolbar">
   <div class="toolbar__brand">
-    <svg class="toolbar__icon" viewBox="0 0 24 24" fill="currentColor">
-      <path
-        d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 1.5L18.5 9H13V3.5zM6 20V4h5v7h7v9H6z"
-      />
-    </svg>
-    <span class="toolbar__title">Editor</span>
+    <!-- Botón volver (solo cuando hay capítulo abierto desde BD) -->
+    @if (novel && chapter) {
+      <button class="toolbar__back" (click)="backToLibrary.emit()" title="Volver a la biblioteca">
+        ← Biblioteca
+      </button>
+      <span class="toolbar__separator"></span>
+      <span class="toolbar__novel-name">{{ novel.title }}</span>
+      <span class="toolbar__chapter-name">/ {{ chapter.title }}</span>
+    } @else {
+      <svg class="toolbar__icon" viewBox="0 0 24 24" fill="currentColor">
+        <path
+          d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 1.5L18.5 9H13V3.5zM6 20V4h5v7h7v9H6z"
+        />
+      </svg>
+      <span class="toolbar__title">Editor</span>
+    }
   </div>
 
   <div class="toolbar__separator"></div>
 
-  <label class="toolbar__btn" title="Abrir .docx">
-    <svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15">
-      <path
-        d="M19 11H7.83l4.88-4.88c.39-.39.39-1.03 0-1.42-.39-.39-1.02-.39-1.41 0l-6.59 6.59c-.39.39-.39 1.02 0 1.41l6.59 6.59c.39.39 1.02.39 1.41 0 .39-.39.39-1.02 0-1.41L7.83 13H19c.55 0 1-.45 1-1s-.45-1-1-1z"
-      />
-    </svg>
-    Abrir
-    <input type="file" accept=".docx" (change)="onFileSelected($event)" hidden />
-  </label>
+  <!-- Abrir .docx (solo en modo standalone, sin capítulo de BD) -->
+  @if (!chapter) {
+    <label class="toolbar__btn" title="Abrir .docx">
+      <svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15">
+        <path
+          d="M19 11H7.83l4.88-4.88c.39-.39.39-1.03 0-1.42-.39-.39-1.02-.39-1.41 0l-6.59 6.59c-.39.39-.39 1.02 0 1.41l6.59 6.59c.39.39 1.02.39 1.41 0 .39-.39.39-1.02 0-1.41L7.83 13H19c.55 0 1-.45 1-1s-.45-1-1-1z"
+        />
+      </svg>
+      Abrir
+      <input type="file" accept=".docx" (change)="onFileSelected($event)" hidden />
+    </label>
+    <div class="toolbar__separator"></div>
+  }
 
-  <div class="toolbar__separator"></div>
+  <!-- ── Guardar ──────────────────────────────────────────────────────────── -->
+  @if (chapter) {
+    <button
+      class="toolbar__btn toolbar__btn--save"
+      [class.toolbar__btn--saved]="saveSuccess()"
+      [disabled]="isSaving() || isAnalyzing()"
+      (click)="saveChapter()"
+      title="Guardar cambios en la base de datos"
+    >
+      @if (isSaving()) {
+        <span class="toolbar__mini-spinner"></span> Guardando…
+      } @else if (saveSuccess()) {
+        ✓ Guardado
+      } @else {
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor">
+          <path
+            d="M17 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"
+          />
+        </svg>
+        Guardar
+      }
+    </button>
+    <div class="toolbar__separator"></div>
+  }
 
-  <!-- ── Botón 1: Referencias (personajes, lugares, objetos) ────────────────── -->
+  <!-- ── Análisis ─────────────────────────────────────────────────────────── -->
+
+  <!-- Botón 1: Referencias -->
   <button
     class="toolbar__btn"
     [disabled]="isEmpty() || isAnalyzing()"
@@ -31,13 +70,12 @@
     title="Buscar personajes, lugares y objetos narrativos"
   >
     @if (isAnalyzingRefs()) {
-      <span class="toolbar__spinner toolbar__spinner--refs"></span>
+      <span class="toolbar__mini-spinner toolbar__mini-spinner--refs"></span>
       Referencias…
       @if (progressRefs() > 0) {
         <span class="toolbar__progress">{{ progressRefs() }}%</span>
       }
     } @else {
-      <!-- Icono de persona/red -->
       <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor">
         <path
           d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"
@@ -47,22 +85,21 @@
     }
   </button>
 
-  <!-- ── Botón 2: Estructura narrativa (narración, pensamiento, títulos) ────── -->
+  <!-- Botón 2: Estructura narrativa -->
   <button
     class="toolbar__btn"
     [disabled]="isEmpty() || isAnalyzing()"
     [class.toolbar__btn--active-blocks]="isAnalyzingBlocks()"
     (click)="analyzeBlocks()"
-    title="Clasificar estructura narrativa: narración, pensamientos, títulos, cortes de escena"
+    title="Clasificar estructura: narración, pensamientos, títulos, cortes"
   >
     @if (isAnalyzingBlocks()) {
-      <span class="toolbar__spinner toolbar__spinner--blocks"></span>
+      <span class="toolbar__mini-spinner toolbar__mini-spinner--blocks"></span>
       Estructura…
       @if (progressBlocks() > 0) {
         <span class="toolbar__progress">{{ progressBlocks() }}%</span>
       }
     } @else {
-      <!-- Icono de documento/párrafos -->
       <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor">
         <path d="M14 17H4v2h10v-2zm6-8H4v2h16V9zM4 15h16v-2H4v2zM4 5v2h16V5H4z" />
       </svg>
@@ -70,23 +107,21 @@
     }
   </button>
 
-  <!-- ── Botón 3: Conversaciones (diálogo + atribuciones) ──────────────────── -->
+  <!-- Botón 3: Conversaciones -->
   <button
     class="toolbar__btn"
     [disabled]="isEmpty() || isAnalyzing()"
     [class.toolbar__btn--active-conv]="isAnalyzingConversations()"
     (click)="analyzeConversations()"
-    title="Extraer y clasificar conversaciones (diálogos + incisos narrativos).
-Recomendado: ejecutar Estructura antes para mejor contexto."
+    title="Extraer y clasificar conversaciones"
   >
     @if (isAnalyzingConversations()) {
-      <span class="toolbar__spinner toolbar__spinner--conv"></span>
+      <span class="toolbar__mini-spinner toolbar__mini-spinner--conv"></span>
       Conversaciones…
       @if (progressConversations() > 0) {
         <span class="toolbar__progress">{{ progressConversations() }}%</span>
       }
     } @else {
-      <!-- Icono de burbuja de diálogo -->
       <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor">
         <path
           d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"
@@ -97,11 +132,7 @@ Recomendado: ejecutar Estructura antes para mejor contexto."
   </button>
 
   @if (annotationCount() > 0) {
-    <button
-      class="toolbar__btn"
-      (click)="onClearAnnotations()"
-      title="Quitar todas las anotaciones"
-    >
+    <button class="toolbar__btn" (click)="onClearAnnotations()" title="Quitar anotaciones">
       <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor">
         <path
           d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"
@@ -113,16 +144,25 @@ Recomendado: ejecutar Estructura antes para mejor contexto."
 
   <div class="toolbar__separator"></div>
 
-  <!-- Thinking toggle -->
+  <!-- Resumen LLM (solo cuando hay capítulo de BD) -->
+  @if (chapter) {
+    <button
+      class="toolbar__btn"
+      [class.toolbar__btn--on]="showSummaryPanel()"
+      [disabled]="isEmpty() || isSummarizing()"
+      (click)="showSummaryPanel.set(!showSummaryPanel())"
+      title="Ver / generar resumen del capítulo"
+    >
+      💡 Resumen
+    </button>
+    <div class="toolbar__separator"></div>
+  }
+
   <button
     class="toolbar__btn"
     [class.toolbar__btn--on]="enableThinking()"
     (click)="enableThinking.set(!enableThinking())"
-    [title]="
-      enableThinking()
-        ? 'Desactivar razonamiento interno del LLM'
-        : 'Activar razonamiento interno (DeepSeek-R1, QwQ…)'
-    "
+    title="Activar razonamiento interno del LLM (DeepSeek-R1, QwQ…)"
   >
     🧠 Thinking
   </button>
@@ -133,7 +173,7 @@ Recomendado: ejecutar Estructura antes para mejor contexto."
     class="toolbar__btn"
     [class.toolbar__btn--on]="xrayMode()"
     (click)="xrayMode.set(!xrayMode())"
-    title="X-Ray: ver tipos de anotación sobre el texto"
+    title="X-Ray: chips de tipo sobre el texto"
   >
     <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor">
       <path
@@ -158,23 +198,20 @@ Recomendado: ejecutar Estructura antes para mejor contexto."
   </button>
 
   <div class="toolbar__spacer"></div>
-
   <span class="toolbar__stat">{{ wordCount() }} palabras</span>
 
   @if (annotationCount() > 0) {
-    <span class="toolbar__badge toolbar__badge--ann"> {{ annotationCount() }} ann </span>
+    <span class="toolbar__badge toolbar__badge--ann">{{ annotationCount() }} ann</span>
   }
-
   @if (modifiedCount() > 0) {
     <span class="toolbar__badge">{{ modifiedCount() }} cambio(s)</span>
   }
 </div>
 
+<!-- ── Barras de estado ──────────────────────────────────────────────────────── -->
 @if (isLoading()) {
   <div class="status-bar status-bar--loading">Procesando documento…</div>
 }
-
-<!-- Barra de progreso unificada: muestra el análisis activo -->
 @if (isAnalyzingRefs()) {
   <div class="status-bar status-bar--analyzing status-bar--refs">
     @if (enableThinking()) {
@@ -188,7 +225,7 @@ Recomendado: ejecutar Estructura antes para mejor contexto."
     @if (enableThinking()) {
       🧠
     }
-    Analizando estructura narrativa… {{ progressBlocks() > 0 ? progressBlocks() + '%' : '' }}
+    Analizando estructura… {{ progressBlocks() > 0 ? progressBlocks() + '%' : '' }}
   </div>
 }
 @if (isAnalyzingConversations()) {
@@ -200,11 +237,44 @@ Recomendado: ejecutar Estructura antes para mejor contexto."
     {{ progressConversations() > 0 ? progressConversations() + '%' : '' }}
   </div>
 }
-
 @if (errorMsg()) {
   <div class="status-bar status-bar--error">{{ errorMsg() }}</div>
 }
 
+<!-- ── Panel de resumen ──────────────────────────────────────────────────────── -->
+@if (showSummaryPanel()) {
+  <div class="summary-panel">
+    <div class="summary-panel__header">
+      <span class="summary-panel__label">💡 Resumen del capítulo</span>
+      @if (!isSummarizing()) {
+        <button
+          class="summary-panel__btn"
+          [disabled]="isEmpty()"
+          (click)="generateSummary()"
+          title="Generar nuevo resumen con LLM"
+        >
+          {{ summaryText() ? 'Regenerar' : 'Generar' }}
+        </button>
+      } @else {
+        <span class="summary-panel__generating">Generando…</span>
+      }
+      <button class="summary-panel__close" (click)="showSummaryPanel.set(false)">✕</button>
+    </div>
+    <div class="summary-panel__body">
+      @if (summaryText()) {
+        <p class="summary-panel__text">
+          {{ summaryText() }}<span [class.summary-panel__cursor]="isSummarizing()"> </span>
+        </p>
+      } @else if (!isSummarizing()) {
+        <p class="summary-panel__empty">
+          Pulsa <strong>Generar</strong> para crear un resumen del capítulo con el LLM.
+        </p>
+      }
+    </div>
+  </div>
+}
+
+<!-- ── Leyenda ───────────────────────────────────────────────────────────────── -->
 @if (annotationCount() > 0) {
   <div class="legend">
     @for (item of legendItems; track item.type) {
@@ -218,11 +288,12 @@ Recomendado: ejecutar Estructura antes para mejor contexto."
       </div>
     }
     @if (xrayMode()) {
-      <span class="legend__hint">X-Ray activo — chips visibles sobre el texto</span>
+      <span class="legend__hint">X-Ray activo</span>
     }
   </div>
 }
 
+<!-- ── Tooltip ───────────────────────────────────────────────────────────────── -->
 @if (tooltipVisible() && tooltipContent()) {
   <div class="ann-tooltip" [style.left.px]="tooltipPos().x" [style.top.px]="tooltipPos().y">
     <span class="ann-tooltip__label" [style.border-left-color]="tooltipContent()!.border">
@@ -234,6 +305,7 @@ Recomendado: ejecutar Estructura antes para mejor contexto."
   </div>
 }
 
+<!-- ── Área del editor ───────────────────────────────────────────────────────── -->
 <div
   class="desktop"
   (mouseover)="onEditorMouseOver($event)"
@@ -244,9 +316,13 @@ Recomendado: ejecutar Estructura antes para mejor contexto."
     @if (isEmpty() && !isLoading()) {
       <div class="page__empty">
         <p>
-          Abre un archivo <strong>.docx</strong> o empieza a escribir.<br />
-          Luego usa <strong>Referencias</strong>, <strong>Estructura</strong> o
-          <strong>Conversaciones</strong> para analizar el documento.
+          @if (chapter) {
+            Este capítulo está vacío. Empieza a escribir y pulsa <strong>Guardar</strong>.
+          } @else {
+            Abre un archivo <strong>.docx</strong> o empieza a escribir.<br />
+            Luego usa <strong>Referencias</strong>, <strong>Estructura</strong> o
+            <strong>Conversaciones</strong>.
+          }
         </p>
       </div>
     }
